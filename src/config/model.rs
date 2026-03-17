@@ -40,11 +40,7 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn listen_addr(&self) -> String {
-        let bind = self
-            .bind
-            .first()
-            .map(String::as_str)
-            .unwrap_or("127.0.0.1");
+        let bind = self.bind.first().map(String::as_str).unwrap_or("127.0.0.1");
         format!("{bind}:{}", self.port)
     }
 }

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::command::{Command, parse_command};
+use crate::command::{Command, SetCondition, parse_command};
 use crate::config::model::{AofConfig, AppendFsyncPolicy};
 use crate::storage::ConcurrentMapDb;
 
@@ -62,20 +62,34 @@ impl AofEngine {
         Ok(engine)
     }
 
-    pub fn append_set(&self, key: &[u8], value: &[u8], ttl_ms: Option<u64>) -> io::Result<()> {
-        let mut payload = encode_set_command(key, value, ttl_ms);
-        let mut file = self
-            .inner
-            .file
-            .lock()
-            .map_err(|_| io::Error::other("aof mutex poisoned"))?;
-        file.write_all(&payload)?;
-        match self.inner.config.appendfsync {
-            AppendFsyncPolicy::Always => file.sync_data(),
-            AppendFsyncPolicy::EverySec | AppendFsyncPolicy::No => Ok(()),
-        }?;
-        payload.clear();
-        Ok(())
+    pub fn append_set(
+        &self,
+        key: &[u8],
+        value: &[u8],
+        ttl_ms: Option<u64>,
+        condition: SetCondition,
+    ) -> io::Result<()> {
+        self.append_encoded(encode_set_command(key, value, ttl_ms, condition))
+    }
+
+    pub fn append_setnx(&self, key: &[u8], value: &[u8]) -> io::Result<()> {
+        self.append_command(b"SETNX", &[key, value])
+    }
+
+    pub fn append_getset(&self, key: &[u8], value: &[u8]) -> io::Result<()> {
+        self.append_command(b"GETSET", &[key, value])
+    }
+
+    pub fn append_mset(&self, pairs: &[(&[u8], &[u8])]) -> io::Result<()> {
+        self.append_pairs_command(b"MSET", pairs)
+    }
+
+    pub fn append_msetnx(&self, pairs: &[(&[u8], &[u8])]) -> io::Result<()> {
+        self.append_pairs_command(b"MSETNX", pairs)
+    }
+
+    pub fn append_del(&self, keys: &[&[u8]]) -> io::Result<()> {
+        self.append_command(b"DEL", keys)
     }
 
     fn start_background_fsync(&self) {
@@ -101,6 +115,28 @@ impl AofEngine {
             .map_err(|_| io::Error::other("aof mutex poisoned"))?;
         file.sync_data()
     }
+
+    fn append_encoded(&self, payload: Vec<u8>) -> io::Result<()> {
+        let mut file = self
+            .inner
+            .file
+            .lock()
+            .map_err(|_| io::Error::other("aof mutex poisoned"))?;
+        file.write_all(&payload)?;
+        match self.inner.config.appendfsync {
+            AppendFsyncPolicy::Always => file.sync_data(),
+            AppendFsyncPolicy::EverySec | AppendFsyncPolicy::No => Ok(()),
+        }?;
+        Ok(())
+    }
+
+    fn append_command(&self, cmd: &[u8], args: &[&[u8]]) -> io::Result<()> {
+        self.append_encoded(encode_command(cmd, args))
+    }
+
+    fn append_pairs_command(&self, cmd: &[u8], pairs: &[(&[u8], &[u8])]) -> io::Result<()> {
+        self.append_encoded(encode_pairs_command(cmd, pairs))
+    }
 }
 
 pub fn replay_set_commands(path: &Path, db: &ConcurrentMapDb) -> io::Result<()> {
@@ -125,27 +161,96 @@ pub fn replay_set_commands(path: &Path, db: &ConcurrentMapDb) -> io::Result<()> 
 }
 
 fn apply_replayed_command(command: Command<'_>, db: &ConcurrentMapDb) {
-    if let Command::Set(key, value, ttl_ms) = command {
-        if let Some(ttl_ms) = ttl_ms {
-            db.set_with_ttl_ms(key, value, ttl_ms);
-        } else {
-            db.set(key, value);
+    match command {
+        Command::Set(key, value, ttl_ms, condition) => apply_set_like(db, key, value, ttl_ms, condition),
+        Command::SetNx(key, value) => apply_set_like(db, key, value, None, SetCondition::Nx),
+        Command::SetEx(key, value, ttl_ms) | Command::PSetEx(key, value, ttl_ms) => {
+            apply_set_like(db, key, value, Some(ttl_ms), SetCondition::None)
+        }
+        Command::GetSet(key, value) => {
+            db.get_set(key, value);
+        }
+        Command::MSet(pairs) => {
+            for (key, value) in pairs {
+                db.set(key, value);
+            }
+        }
+        Command::MSetNx(pairs) => {
+            db.mset_nx(&pairs);
+        }
+        Command::Del(keys) => {
+            for key in keys {
+                db.delete(key);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn encode_set_command(
+    key: &[u8],
+    value: &[u8],
+    ttl_ms: Option<u64>,
+    condition: SetCondition,
+) -> Vec<u8> {
+    let mut args = Vec::with_capacity(4);
+    args.push(key);
+    args.push(value);
+
+    let ttl_buf = ttl_ms.map(|v| v.to_string());
+    if let Some(ttl) = ttl_buf.as_ref() {
+        args.push(b"PX");
+        args.push(ttl.as_bytes());
+    }
+
+    match condition {
+        SetCondition::None => {}
+        SetCondition::Nx => args.push(b"NX"),
+        SetCondition::Xx => args.push(b"XX"),
+    }
+
+    encode_command(b"SET", &args)
+}
+
+fn apply_set_like(
+    db: &ConcurrentMapDb,
+    key: &[u8],
+    value: &[u8],
+    ttl_ms: Option<u64>,
+    condition: SetCondition,
+) {
+    match condition {
+        SetCondition::None => db.set_with_optional_ttl_ms(key, value, ttl_ms),
+        SetCondition::Nx => {
+            db.set_nx_with_optional_ttl_ms(key, value, ttl_ms);
+        }
+        SetCondition::Xx => {
+            db.set_xx_with_optional_ttl_ms(key, value, ttl_ms);
         }
     }
 }
 
-fn encode_set_command(key: &[u8], value: &[u8], ttl_ms: Option<u64>) -> Vec<u8> {
-    let mut out = Vec::with_capacity(64 + key.len() + value.len());
-    let array_len = if ttl_ms.is_some() { 5 } else { 3 };
-    append_array_header(&mut out, array_len);
-    append_bulk(&mut out, b"SET");
-    append_bulk(&mut out, key);
-    append_bulk(&mut out, value);
-    if let Some(ttl_ms) = ttl_ms {
-        append_bulk(&mut out, b"PX");
-        append_bulk(&mut out, ttl_ms.to_string().as_bytes());
+fn encode_command(cmd: &[u8], args: &[&[u8]]) -> Vec<u8> {
+    let mut total_len = cmd.len();
+    for arg in args {
+        total_len += arg.len();
+    }
+    let mut out = Vec::with_capacity(32 + total_len);
+    append_array_header(&mut out, 1 + args.len());
+    append_bulk(&mut out, cmd);
+    for arg in args {
+        append_bulk(&mut out, arg);
     }
     out
+}
+
+fn encode_pairs_command(cmd: &[u8], pairs: &[(&[u8], &[u8])]) -> Vec<u8> {
+    let mut args = Vec::with_capacity(pairs.len() * 2);
+    for (key, value) in pairs {
+        args.push(*key);
+        args.push(*value);
+    }
+    encode_command(cmd, &args)
 }
 
 fn append_array_header(out: &mut Vec<u8>, len: usize) {

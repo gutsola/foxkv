@@ -1,6 +1,6 @@
 pub mod app_context;
-pub mod config;
 mod command;
+pub mod config;
 pub mod persistence;
 mod resp;
 

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use crate::config::model::{AppConfig, AppendFsyncPolicy, SaveRule};
 use crate::config::ConfigError;
+use crate::config::model::{AppConfig, AppendFsyncPolicy, SaveRule};
 
 pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), ConfigError> {
     let mut seen_save = false;
@@ -111,8 +111,7 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                         line_no + 1
                     )));
                 }
-                config.aof.auto_rewrite_min_size_bytes =
-                    parse_size_bytes(&tokens[1], line_no + 1)?;
+                config.aof.auto_rewrite_min_size_bytes = parse_size_bytes(&tokens[1], line_no + 1)?;
             }
             "aof-use-rdb-preamble" => {
                 if tokens.len() != 2 {
@@ -259,16 +258,10 @@ fn parse_size_bytes(raw: &str, line_no: usize) -> Result<u64, ConfigError> {
         (lower.as_str(), 1_u64)
     };
 
-    let num = num_part.trim().parse::<u64>().map_err(|_| {
-        ConfigError::Parse(format!(
-            "line {}: invalid size '{}'",
-            line_no, raw
-        ))
-    })?;
-    num.checked_mul(factor).ok_or_else(|| {
-        ConfigError::Parse(format!(
-            "line {}: size overflow '{}'",
-            line_no, raw
-        ))
-    })
+    let num = num_part
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| ConfigError::Parse(format!("line {}: invalid size '{}'", line_no, raw)))?;
+    num.checked_mul(factor)
+        .ok_or_else(|| ConfigError::Parse(format!("line {}: size overflow '{}'", line_no, raw)))
 }

@@ -24,7 +24,9 @@ pub fn validate_config(config: &AppConfig) -> Result<(), ConfigError> {
         }
     }
     if config.rdb.dbfilename.trim().is_empty() {
-        return Err(ConfigError::Validate("dbfilename must not be empty".to_string()));
+        return Err(ConfigError::Validate(
+            "dbfilename must not be empty".to_string(),
+        ));
     }
     if config.aof.appendfilename.trim().is_empty() {
         return Err(ConfigError::Validate(

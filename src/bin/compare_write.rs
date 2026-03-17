@@ -42,7 +42,8 @@ impl TargetMode {
 fn main() -> Result<(), Box<dyn Error>> {
     let options = parse_cli_options()?;
     let csv_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("orders_1m.csv");
-    let redis_addr = std::env::var("COMPARE_REDIS_ADDR").unwrap_or_else(|_| "127.0.0.1:6379".to_string());
+    let redis_addr =
+        std::env::var("COMPARE_REDIS_ADDR").unwrap_or_else(|_| "127.0.0.1:6379".to_string());
     let mycache_addr =
         std::env::var("COMPARE_FOXKV_ADDR").unwrap_or_else(|_| "127.0.0.1:6380".to_string());
     let thread_count = std::env::var("COMPARE_THREADS")
@@ -128,7 +129,8 @@ fn parse_cli_options() -> Result<CliOptions, Box<dyn Error>> {
         }
     }
 
-    let target_mode = TargetMode::from_value(&mode_value).map_err(|e| -> Box<dyn Error> { e.into() })?;
+    let target_mode =
+        TargetMode::from_value(&mode_value).map_err(|e| -> Box<dyn Error> { e.into() })?;
     Ok(CliOptions {
         target_mode,
         pipeline_depth,
@@ -144,7 +146,9 @@ fn default_thread_count() -> usize {
 }
 
 fn load_csv_rows(path: &PathBuf) -> Result<Rows, Box<dyn Error>> {
-    let mut reader = csv::ReaderBuilder::new().has_headers(true).from_path(path)?;
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_path(path)?;
     let mut rows = Vec::new();
 
     for result in reader.records() {
