@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ahash::RandomState;
 use dashmap::DashMap;
@@ -25,7 +26,13 @@ impl std::error::Error for ConcurrentMapError {}
 
 #[derive(Clone)]
 pub struct ConcurrentMapDb {
-    inner: Arc<DashMap<Vec<u8>, Vec<u8>, RandomState>>,
+    inner: Arc<DashMap<Vec<u8>, Entry, RandomState>>,
+}
+
+#[derive(Clone)]
+struct Entry {
+    value: Vec<u8>,
+    expire_at_ms: Option<u64>,
 }
 
 impl ConcurrentMapDb {
@@ -39,11 +46,56 @@ impl ConcurrentMapDb {
     }
 
     pub fn set(&self, key: &[u8], value: &[u8]) {
-        self.inner.insert(key.to_vec(), value.to_vec());
+        self.inner.insert(
+            key.to_vec(),
+            Entry {
+                value: value.to_vec(),
+                expire_at_ms: None,
+            },
+        );
+    }
+
+    pub fn set_with_ttl_ms(&self, key: &[u8], value: &[u8], ttl_ms: u64) {
+        let expire_at_ms = now_ms().saturating_add(ttl_ms);
+        self.inner.insert(
+            key.to_vec(),
+            Entry {
+                value: value.to_vec(),
+                expire_at_ms: Some(expire_at_ms),
+            },
+        );
     }
 
     pub fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.inner.get(key).map(|v| v.clone())
+        let now = now_ms();
+        if let Some(entry) = self.inner.get(key) {
+            if entry
+                .expire_at_ms
+                .is_some_and(|expire_at_ms| expire_at_ms <= now)
+            {
+                drop(entry);
+                self.inner.remove(key);
+                return None;
+            }
+            return Some(entry.value.clone());
+        }
+        None
+    }
+
+    pub fn ttl_seconds(&self, key: &[u8]) -> i64 {
+        let now = now_ms();
+        if let Some(entry) = self.inner.get(key) {
+            if let Some(expire_at_ms) = entry.expire_at_ms {
+                if expire_at_ms <= now {
+                    drop(entry);
+                    self.inner.remove(key);
+                    return -2;
+                }
+                return ((expire_at_ms - now) / 1000) as i64;
+            }
+            return -1;
+        }
+        -2
     }
 
     pub fn delete(&self, key: &[u8]) -> bool {
@@ -62,5 +114,12 @@ fn validate_config(config: ConcurrentMapConfig) -> Result<(), ConcurrentMapError
         ));
     }
     Ok(())
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
