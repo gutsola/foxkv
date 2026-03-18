@@ -5,8 +5,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use crate::app_context::AppContext;
-use crate::command::exec::execute_command;
-use crate::command::parse_command;
+use crate::command::{execute_argv_command, parse_argv_frame};
 use crate::resp::append_error_response;
 
 const READ_BUF_SIZE: usize = 16 * 1024;
@@ -26,8 +25,8 @@ pub async fn handle_connection(mut stream: TcpStream, ctx: Arc<AppContext>) -> i
         response_buf.clear();
 
         loop {
-            let parsed = parse_command(&buffer[read_pos..]);
-            let (command, consumed) = match parsed {
+            let parsed = parse_argv_frame(&buffer[read_pos..]);
+            let (argv, consumed) = match parsed {
                 Ok(Some(value)) => value,
                 Ok(None) => break,
                 Err(err) => {
@@ -37,7 +36,7 @@ pub async fn handle_connection(mut stream: TcpStream, ctx: Arc<AppContext>) -> i
                     break;
                 }
             };
-            if let Err(err) = execute_command(command, ctx.as_ref(), &mut response_buf) {
+            if let Err(err) = execute_argv_command(&argv, ctx.as_ref(), &mut response_buf) {
                 append_error_response(&mut response_buf, &err);
             }
             read_pos += consumed;

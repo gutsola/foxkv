@@ -5,11 +5,13 @@ use std::thread;
 
 use foxkv::app_context::AppContext;
 use foxkv::config::{self, AppConfig};
-use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_set_commands};
+use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
 use foxkv::server::run_redis_server;
-use foxkv::storage::{ConcurrentMapConfig, ConcurrentMapDb};
+use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
+use foxkv::warm_up_command_registry;
 
 fn main() -> io::Result<()> {
+    warm_up_command_registry();
     let config = load_config_from_args()
         .map_err(|err| io::Error::other(format!("failed to load config: {err}")))?;
     let cpu_count = thread::available_parallelism()
@@ -23,11 +25,13 @@ fn main() -> io::Result<()> {
         .enable_all()
         .build()?;
 
-    let db = ConcurrentMapDb::new(ConcurrentMapConfig {
-        worker_count: write_threads,
-    })
-    .expect("failed to initialize storage");
-    let aof = initialize_aof(&config, &db)
+    let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
+        DashMapStorageEngine::new(DbConfig {
+            worker_count: write_threads,
+        })
+        .expect("failed to initialize storage"),
+    );
+    let aof = initialize_aof(&config, db.clone())
         .map_err(|err| io::Error::other(format!("failed to initialize aof: {err}")))?;
     let ctx = Arc::new(AppContext::new(config.clone(), db, aof));
 
@@ -82,12 +86,15 @@ fn load_config_from_args() -> Result<AppConfig, config::ConfigError> {
     Ok(config::default_config())
 }
 
-fn initialize_aof(config: &AppConfig, db: &ConcurrentMapDb) -> io::Result<Option<AofEngine>> {
+fn initialize_aof(
+    config: &AppConfig,
+    db: Arc<dyn StorageEngine + Send + Sync>,
+) -> io::Result<Option<AofEngine>> {
     let runtime_cfg = AofRuntimeConfig::from_config(&config.rdb.dir, &config.aof);
     if !runtime_cfg.enabled {
         return Ok(None);
     }
-    replay_set_commands(&runtime_cfg.file_path, db)?;
+    replay_commands(&runtime_cfg.file_path, db)?;
     let engine = AofEngine::open(runtime_cfg)?;
     Ok(Some(engine))
 }
