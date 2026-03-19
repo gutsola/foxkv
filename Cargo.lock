@@ -83,7 +83,6 @@ dependencies = [
  "csv",
  "dashmap",
  "itoa",
- "memchr",
  "smallvec",
  "tokio",
 ]

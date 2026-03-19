@@ -1,49 +1,4 @@
-use std::str;
-
 use itoa::Buffer;
-use memchr::memchr;
-
-pub fn parse_number_line(input: &[u8], prefix: u8) -> Result<Option<(isize, usize)>, String> {
-    if input.is_empty() || input[0] != prefix {
-        return Err("ERR Protocol error: invalid prefix".to_string());
-    }
-    let rel_pos = match find_crlf(&input[1..]) {
-        Some(v) => v,
-        None => return Ok(None),
-    };
-    let end = 1 + rel_pos;
-    let value = str::from_utf8(&input[1..end])
-        .map_err(|_| "ERR Protocol error: invalid number".to_string())?
-        .parse::<isize>()
-        .map_err(|_| "ERR Protocol error: invalid number".to_string())?;
-    Ok(Some((value, end + 2)))
-}
-
-pub fn parse_bulk(input: &[u8], cursor: usize) -> Result<Option<(&[u8], usize)>, String> {
-    if cursor >= input.len() {
-        return Ok(None);
-    }
-    if input[cursor] != b'$' {
-        return Err("ERR Protocol error: expected '$'".to_string());
-    }
-    let (bulk_len, next_cursor) = match parse_number_line(&input[cursor..], b'$')? {
-        Some(v) => v,
-        None => return Ok(None),
-    };
-    if bulk_len < 0 {
-        return Err("ERR Protocol error: invalid bulk length".to_string());
-    }
-    let data_start = cursor + next_cursor;
-    let bulk_len = bulk_len as usize;
-    if input.len() < data_start + bulk_len + 2 {
-        return Ok(None);
-    }
-    if &input[data_start + bulk_len..data_start + bulk_len + 2] != b"\r\n" {
-        return Err("ERR Protocol error: expected CRLF after bulk".to_string());
-    }
-    let data = &input[data_start..data_start + bulk_len];
-    Ok(Some((data, data_start + bulk_len + 2)))
-}
 
 pub fn parse_ascii_u64(input: &[u8]) -> Result<u64, String> {
     if input.is_empty() {
@@ -116,16 +71,4 @@ fn append_usize_ascii(out: &mut Vec<u8>, mut n: usize) {
         n /= 10;
     }
     out.extend_from_slice(&digits[idx..]);
-}
-
-fn find_crlf(input: &[u8]) -> Option<usize> {
-    let mut offset = 0_usize;
-    while let Some(rel_lf) = memchr(b'\n', &input[offset..]) {
-        let lf = offset + rel_lf;
-        if lf > 0 && input[lf - 1] == b'\r' {
-            return Some(lf - 1);
-        }
-        offset = lf + 1;
-    }
-    None
 }

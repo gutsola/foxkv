@@ -61,6 +61,10 @@ pub fn execute_argv_command(
     }
 
     types::string::string_commands!(emit_dispatch);
+    types::hash::hash_commands!(emit_dispatch);
+    types::list::list_commands!(emit_dispatch);
+    types::set::set_commands!(emit_dispatch);
+    types::zset::zset_commands!(emit_dispatch);
 
     let name = String::from_utf8_lossy(cmd);
     Err(format!("ERR unknown command '{}'", name))
@@ -115,5 +119,21 @@ mod tests {
         out.clear();
         execute_argv_command(&argv2, &ctx, &mut out).expect("dispatch get failed");
         assert_eq!(out, b"$2\r\nv1\r\n");
+    }
+
+    #[test]
+    fn zadd_dispatch_works() {
+        let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
+            DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"),
+        );
+        let ctx = AppContext::new(default_config(), db, None);
+        // ZADD key 1 a 2 b (6 args: ZADD, key, score1, member1, score2, member2)
+        let zadd = b"*6\r\n$4\r\nZADD\r\n$3\r\nkey\r\n$1\r\n1\r\n$1\r\na\r\n$1\r\n2\r\n$1\r\nb\r\n";
+
+        let (argv, _consumed) = parse_argv_frame(zadd).expect("zadd should be complete");
+        assert_eq!(argv.len(), 6);
+        let mut out = Vec::new();
+        execute_argv_command(&argv, &ctx, &mut out).expect("dispatch zadd failed");
+        assert_eq!(out, b":2\r\n");
     }
 }

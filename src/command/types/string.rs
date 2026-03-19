@@ -1,4 +1,5 @@
 use crate::app_context::AppContext;
+use crate::command::shared::args::required_arg;
 use crate::command::shared::time::current_time_ms;
 use crate::command::SetCondition;
 use crate::resp::{append_bulk_response, append_integer_response, append_simple_response, parse_ascii_u64};
@@ -493,14 +494,6 @@ fn append_array_header(out: &mut Vec<u8>, len: usize) {
     out.push(b'*');
     out.extend_from_slice(len.to_string().as_bytes());
     out.extend_from_slice(b"\r\n");
-}
-
-fn required_arg<'a>(args: &[&'a [u8]], index: usize) -> Result<&'a [u8], String> {
-    if index < args.len() {
-        Ok(args[index])
-    } else {
-        Err("ERR syntax error".to_string())
-    }
 }
 
 fn set_with_ttl(

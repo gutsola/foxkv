@@ -9,6 +9,5 @@ csv = "1.3"
 dashmap = "6"
 bytes = "1"
 itoa = "1"
-memchr = "2.8.0"
 smallvec = { version = "1", features = ["const_generics"] }
 tokio = { version = "1", features = ["net", "rt-multi-thread", "io-util", "macros"] }
