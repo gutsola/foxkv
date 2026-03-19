@@ -137,6 +137,10 @@ impl StorageEngine for DashMapStorageEngine {
         let items = keys[start..end].to_vec();
         (next_cursor, items)
     }
+
+    fn flush_all(&self) {
+        self.inner.clear();
+    }
 }
 
 fn validate_db_config(config: DbConfig) -> Result<(), DbError> {

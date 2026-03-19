@@ -13,6 +13,7 @@ pub fn append_bulk_items(out: &mut Vec<u8>, items: &[Vec<u8>]) {
     }
 }
 
+#[allow(dead_code)]
 pub fn append_optional_bulk_items(out: &mut Vec<u8>, items: &[Option<Vec<u8>>]) {
     append_array_header(out, items.len());
     for item in items {

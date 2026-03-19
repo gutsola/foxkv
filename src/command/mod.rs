@@ -59,12 +59,15 @@ pub fn execute_argv_command(
             }
         };
     }
-
+    
     types::string::string_commands!(emit_dispatch);
     types::hash::hash_commands!(emit_dispatch);
     types::list::list_commands!(emit_dispatch);
     types::set::set_commands!(emit_dispatch);
     types::zset::zset_commands!(emit_dispatch);
+    types::connection::connection_commands!(emit_dispatch);
+    types::server::server_commands!(emit_dispatch);
+    types::generic::generic_commands!(emit_dispatch);
 
     let name = String::from_utf8_lossy(cmd);
     Err(format!("ERR unknown command '{}'", name))

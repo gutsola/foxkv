@@ -9,4 +9,5 @@ pub trait StorageEngine: Send + Sync {
     fn contains_live_key(&self, key: &[u8]) -> bool;
     fn iter_live_keys(&self) -> Vec<Vec<u8>>;
     fn scan_live_keys(&self, cursor: usize, count: usize) -> (usize, Vec<Vec<u8>>);
+    fn flush_all(&self);
 }

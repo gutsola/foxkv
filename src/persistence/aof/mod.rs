@@ -132,6 +132,30 @@ impl AofEngine {
         self.append_command(b"DEL", keys)
     }
 
+    pub fn append_flushall(&self) -> io::Result<()> {
+        self.append_command(b"FLUSHALL", &[])
+    }
+
+    pub fn append_expire(&self, key: &[u8], seconds: &[u8]) -> io::Result<()> {
+        self.append_command(b"EXPIRE", &[key, seconds])
+    }
+
+    pub fn append_expireat(&self, key: &[u8], timestamp: &[u8]) -> io::Result<()> {
+        self.append_command(b"EXPIREAT", &[key, timestamp])
+    }
+
+    pub fn append_pexpire(&self, key: &[u8], ms: &[u8]) -> io::Result<()> {
+        self.append_command(b"PEXPIRE", &[key, ms])
+    }
+
+    pub fn append_pexpireat(&self, key: &[u8], timestamp_ms: &[u8]) -> io::Result<()> {
+        self.append_command(b"PEXPIREAT", &[key, timestamp_ms])
+    }
+
+    pub fn append_persist(&self, key: &[u8]) -> io::Result<()> {
+        self.append_command(b"PERSIST", &[key])
+    }
+
     fn start_background_fsync(&self) {
         if !matches!(self.inner.config.appendfsync, AppendFsyncPolicy::EverySec) {
             return;

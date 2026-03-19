@@ -10,6 +10,7 @@ const TYPE_ZSET: u8 = 4;
 
 #[derive(Clone)]
 pub enum TypedValue {
+    #[allow(dead_code)]
     String(Vec<u8>),
     Hash(BTreeMap<Vec<u8>, Vec<u8>>),
     List(Vec<Vec<u8>>),
