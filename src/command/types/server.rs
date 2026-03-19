@@ -19,6 +19,31 @@ pub(crate) use server_commands;
 
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+fn format_size_for_config(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 * 1024 {
+        format!("{}gb", bytes / (1024 * 1024 * 1024))
+    } else if bytes >= 1024 * 1024 {
+        format!("{}mb", bytes / (1024 * 1024))
+    } else if bytes >= 1024 {
+        format!("{}kb", bytes / 1024)
+    } else {
+        bytes.to_string()
+    }
+}
+
+fn format_client_output_buffer_limit(
+    hard: u64,
+    soft: u64,
+    soft_secs: u32,
+) -> String {
+    format!(
+        "{} {} {}",
+        format_size_for_config(hard),
+        format_size_for_config(soft),
+        soft_secs
+    )
+}
+
 pub fn cmd_config(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let subcommand = required_arg(args, 0)?;
     if !subcommand.eq_ignore_ascii_case(b"GET") {
@@ -29,13 +54,50 @@ pub fn cmd_config(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
         return Err("ERR wrong number of arguments for 'config get' command".to_string());
     }
     let config = &ctx.config;
+    let client_limits = &config.client_output_buffer_limits;
+    let client_output_buffer_limit_value = format!(
+        "normal {}\nreplica {}\npubsub {}",
+        format_client_output_buffer_limit(
+            client_limits.normal.hard_limit_bytes,
+            client_limits.normal.soft_limit_bytes,
+            client_limits.normal.soft_seconds,
+        ),
+        format_client_output_buffer_limit(
+            client_limits.replica.hard_limit_bytes,
+            client_limits.replica.soft_limit_bytes,
+            client_limits.replica.soft_seconds,
+        ),
+        format_client_output_buffer_limit(
+            client_limits.pubsub.hard_limit_bytes,
+            client_limits.pubsub.soft_limit_bytes,
+            client_limits.pubsub.soft_seconds,
+        ),
+    );
     let all_params: Vec<(&str, String)> = vec![
         ("port", config.port.to_string()),
         ("bind", config.bind.join(" ")),
         ("dir", config.rdb.dir.to_string_lossy().to_string()),
         ("dbfilename", config.rdb.dbfilename.clone()),
+        ("stop-writes-on-bgsave-error", if config.rdb.stop_writes_on_bgsave_error { "yes" } else { "no" }.to_string()),
+        ("rdbcompression", if config.rdb.rdbcompression { "yes" } else { "no" }.to_string()),
+        ("rdbchecksum", if config.rdb.rdbchecksum { "yes" } else { "no" }.to_string()),
+        ("rdb-save-incremental-fsync", if config.rdb.rdb_save_incremental_fsync { "yes" } else { "no" }.to_string()),
         ("appendonly", if config.aof.enabled { "yes" } else { "no" }.to_string()),
         ("appendfilename", config.aof.appendfilename.clone()),
+        ("appendfsync", match config.aof.appendfsync {
+            crate::config::model::AppendFsyncPolicy::Always => "always",
+            crate::config::model::AppendFsyncPolicy::EverySec => "everysec",
+            crate::config::model::AppendFsyncPolicy::No => "no",
+        }.to_string()),
+        ("auto-aof-rewrite-percentage", config.aof.auto_rewrite_percentage.to_string()),
+        ("auto-aof-rewrite-min-size", format_size_for_config(config.aof.auto_rewrite_min_size_bytes)),
+        ("aof-use-rdb-preamble", if config.aof.use_rdb_preamble { "yes" } else { "no" }.to_string()),
+        ("aof-rewrite-incremental-fsync", if config.aof.aof_rewrite_incremental_fsync { "yes" } else { "no" }.to_string()),
+        ("requirepass", config.requirepass.clone().unwrap_or_default()),
+        ("maxclients", config.maxclients.map(|n| n.to_string()).unwrap_or_else(|| "10000".to_string())),
+        ("client-output-buffer-limit", client_output_buffer_limit_value),
+        ("lua-time-limit", config.lua_time_limit.to_string()),
+        ("hz", config.hz.to_string()),
     ];
     let mut pairs: Vec<(&str, String)> = Vec::new();
     let want_all = patterns.iter().any(|p| *p == b"*");
@@ -90,6 +152,17 @@ pub fn cmd_info(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
         buf.push_str("# Server\r\n");
         buf.push_str(&format!("redis_version:{}\r\n", SERVER_VERSION));
         buf.push_str("redis_mode:standalone\r\n");
+    }
+    if section.eq_ignore_ascii_case("all")
+        || section.eq_ignore_ascii_case("clients")
+        || section.eq_ignore_ascii_case("default")
+    {
+        buf.push_str("# Clients\r\n");
+        buf.push_str("connected_clients:0\r\n");
+        buf.push_str(&format!(
+            "maxclients:{}\r\n",
+            ctx.config.maxclients.unwrap_or(10000)
+        ));
     }
     if section.eq_ignore_ascii_case("all")
         || section.eq_ignore_ascii_case("memory")

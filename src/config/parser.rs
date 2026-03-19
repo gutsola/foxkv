@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use crate::config::ConfigError;
-use crate::config::model::{AppConfig, AppendFsyncPolicy, SaveRule};
+use crate::config::model::{
+    AppConfig, AppendFsyncPolicy, ClientOutputBufferLimit, SaveRule,
+};
 
 pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), ConfigError> {
     let mut seen_save = false;
@@ -67,6 +69,46 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                 }
                 config.rdb.dir = PathBuf::from(tokens[1].clone());
             }
+            "stop-writes-on-bgsave-error" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: stop-writes-on-bgsave-error requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.rdb.stop_writes_on_bgsave_error =
+                    parse_yes_no(&tokens[1], "stop-writes-on-bgsave-error", line_no + 1)?;
+            }
+            "rdbcompression" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: rdbcompression requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.rdb.rdbcompression =
+                    parse_yes_no(&tokens[1], "rdbcompression", line_no + 1)?;
+            }
+            "rdbchecksum" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: rdbchecksum requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.rdb.rdbchecksum =
+                    parse_yes_no(&tokens[1], "rdbchecksum", line_no + 1)?;
+            }
+            "rdb-save-incremental-fsync" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: rdb-save-incremental-fsync requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.rdb.rdb_save_incremental_fsync =
+                    parse_yes_no(&tokens[1], "rdb-save-incremental-fsync", line_no + 1)?;
+            }
             "appendonly" => {
                 if tokens.len() != 2 {
                     return Err(ConfigError::Parse(format!(
@@ -122,6 +164,77 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                 }
                 config.aof.use_rdb_preamble =
                     parse_yes_no(&tokens[1], "aof-use-rdb-preamble", line_no + 1)?;
+            }
+            "aof-rewrite-incremental-fsync" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: aof-rewrite-incremental-fsync requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.aof.aof_rewrite_incremental_fsync =
+                    parse_yes_no(&tokens[1], "aof-rewrite-incremental-fsync", line_no + 1)?;
+            }
+            "requirepass" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: requirepass requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.requirepass = Some(tokens[1].clone());
+            }
+            "maxclients" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: maxclients requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.maxclients = Some(parse_u32(&tokens[1], "maxclients", line_no + 1)?);
+            }
+            "client-output-buffer-limit" => {
+                if tokens.len() != 5 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: client-output-buffer-limit expects <class> <hard> <soft> <soft_seconds>",
+                        line_no + 1
+                    )));
+                }
+                let class = tokens[1].to_ascii_lowercase();
+                let limit = ClientOutputBufferLimit {
+                    hard_limit_bytes: parse_size_bytes(&tokens[2], line_no + 1)?,
+                    soft_limit_bytes: parse_size_bytes(&tokens[3], line_no + 1)?,
+                    soft_seconds: parse_u32(&tokens[4], "client-output-buffer-limit soft_seconds", line_no + 1)?,
+                };
+                match class.as_str() {
+                    "normal" => config.client_output_buffer_limits.normal = limit,
+                    "replica" => config.client_output_buffer_limits.replica = limit,
+                    "pubsub" => config.client_output_buffer_limits.pubsub = limit,
+                    _ => {
+                        return Err(ConfigError::Parse(format!(
+                            "line {}: client-output-buffer-limit class must be normal/replica/pubsub, got '{}'",
+                            line_no + 1, tokens[1]
+                        )));
+                    }
+                }
+            }
+            "lua-time-limit" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: lua-time-limit requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.lua_time_limit = parse_u32(&tokens[1], "lua-time-limit", line_no + 1)?;
+            }
+            "hz" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: hz requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.hz = parse_u32(&tokens[1], "hz", line_no + 1)?;
             }
             _ => {}
         }

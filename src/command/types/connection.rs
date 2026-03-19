@@ -15,10 +15,20 @@ pub(crate) use connection_commands;
 
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn cmd_auth(args: &[&[u8]], _ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
-    let _password = required_arg(args, 0)?;
-    // No password configured: always succeed (Redis behavior when requirepass is not set)
-    append_simple_response(out, "OK");
+pub fn cmd_auth(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+    let password = required_arg(args, 0)?;
+    match &ctx.config.requirepass {
+        None => {
+            // No password configured: always succeed (Redis behavior when requirepass is not set)
+            append_simple_response(out, "OK");
+        }
+        Some(configured) => {
+            if password != configured.as_bytes() {
+                return Err("ERR invalid password".to_string());
+            }
+            append_simple_response(out, "OK");
+        }
+    }
     Ok(())
 }
 
