@@ -1,7 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread;
+use std::time::Instant;
 
 use foxkv::app_context::AppContext;
 use foxkv::config::{self, AppConfig};
@@ -9,14 +9,23 @@ use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
 use foxkv::server::run_redis_server;
 use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 fn main() -> io::Result<()> {
     let config = load_config_from_args()
         .map_err(|err| io::Error::other(format!("failed to load config: {err}")))?;
-    let cpu_count = thread::available_parallelism()
-        .map(|v| v.get())
-        .unwrap_or(1);
     let write_threads = 16;
     let addr = config.listen_addr();
+    let pid = std::process::id();
+
+    eprintln!("# oO0OoO0OoO0Oo Foxkv is starting oO0OoO0OoO0Oo");
+    eprintln!(
+        "# Foxkv version={}, bits=64, pid={}, just started",
+        VERSION, pid
+    );
+    eprintln!("# Configuration loaded");
+
+    print_startup_logo(config.port, pid);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(write_threads)
@@ -29,23 +38,45 @@ fn main() -> io::Result<()> {
         })
         .expect("failed to initialize storage"),
     );
+
+    eprintln!("# Server initialized");
+
+    let load_start = Instant::now();
     let aof = initialize_aof(&config, db.clone())
         .map_err(|err| io::Error::other(format!("failed to initialize aof: {err}")))?;
+    let load_elapsed = load_start.elapsed();
+    let load_secs = load_elapsed.as_secs_f64();
+
+    if config.aof.enabled {
+        eprintln!(
+            "# DB loaded from append only file: {:.3} seconds",
+            load_secs
+        );
+    } else {
+        eprintln!("# DB loaded from disk: {:.3} seconds", load_secs);
+    }
+
+    eprintln!("# Ready to accept connections");
+
     let ctx = Arc::new(AppContext::new(config.clone(), db, aof));
-
-    println!(
-        "starting foxkv server on {}, cpu_count={}, write_threads={}, bind={:?}, port={}, aof_enabled={}, rdb_dir={}, rdb_file={}",
-        addr,
-        cpu_count,
-        write_threads,
-        config.bind,
-        config.port,
-        config.aof.enabled,
-        config.rdb.dir.display(),
-        config.rdb.dbfilename
-    );
-
     runtime.block_on(run_redis_server(&addr, ctx))
+}
+
+fn print_startup_logo(port: u16, pid: u32) {
+    let logo = r#"          /\   /\
+         /  \_/  \            Foxkv {version} 64 bit
+        |  o   o  |           Running in standalone mode
+         \   w   /            Port: {port}
+          \_____/             PID: {pid}
+         /       \
+    ____/  ~~~   \____
+"#;
+    eprint!(
+        "{}",
+        logo.replace("{version}", VERSION)
+            .replace("{port}", &port.to_string())
+            .replace("{pid}", &pid.to_string())
+    );
 }
 
 fn load_config_from_args() -> Result<AppConfig, config::ConfigError> {
