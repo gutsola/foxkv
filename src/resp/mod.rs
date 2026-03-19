@@ -1,5 +1,6 @@
 use std::str;
 
+use itoa::Buffer;
 use memchr::memchr;
 
 pub fn parse_number_line(input: &[u8], prefix: u8) -> Result<Option<(isize, usize)>, String> {
@@ -97,7 +98,8 @@ pub fn append_bulk_response(out: &mut Vec<u8>, value: Option<&[u8]>) {
 
 pub fn append_integer_response(out: &mut Vec<u8>, value: i64) {
     out.push(b':');
-    out.extend_from_slice(value.to_string().as_bytes());
+    let mut buf = Buffer::new();
+    out.extend_from_slice(buf.format(value).as_bytes());
     out.extend_from_slice(b"\r\n");
 }
 

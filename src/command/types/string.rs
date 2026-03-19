@@ -1,32 +1,34 @@
-use std::collections::HashMap;
-
 use crate::app_context::AppContext;
 use crate::command::shared::time::current_time_ms;
-use crate::command::{CommandHandler, SetCondition};
+use crate::command::SetCondition;
 use crate::resp::{append_bulk_response, append_integer_response, append_simple_response, parse_ascii_u64};
 use crate::storage::ValueEntry;
 
-pub fn register_handlers(registry: &mut HashMap<String, CommandHandler>) {
-    registry.insert("append".to_string(), cmd_append as CommandHandler);
-    registry.insert("decr".to_string(), cmd_decr as CommandHandler);
-    registry.insert("decrby".to_string(), cmd_decrby as CommandHandler);
-    registry.insert("get".to_string(), cmd_get as CommandHandler);
-    registry.insert("getrange".to_string(), cmd_getrange as CommandHandler);
-    registry.insert("getset".to_string(), cmd_getset as CommandHandler);
-    registry.insert("incr".to_string(), cmd_incr as CommandHandler);
-    registry.insert("incrby".to_string(), cmd_incrby as CommandHandler);
-    registry.insert("incrbyfloat".to_string(), cmd_incrbyfloat as CommandHandler);
-    registry.insert("mget".to_string(), cmd_mget as CommandHandler);
-    registry.insert("mset".to_string(), cmd_mset as CommandHandler);
-    registry.insert("msetnx".to_string(), cmd_msetnx as CommandHandler);
-    registry.insert("psetex".to_string(), cmd_psetex as CommandHandler);
-    registry.insert("set".to_string(), cmd_set as CommandHandler);
-    registry.insert("setex".to_string(), cmd_setex as CommandHandler);
-    registry.insert("setnx".to_string(), cmd_setnx as CommandHandler);
-    registry.insert("setrange".to_string(), cmd_setrange as CommandHandler);
-    registry.insert("strlen".to_string(), cmd_strlen as CommandHandler);
-    registry.insert("substr".to_string(), cmd_substr as CommandHandler);
+macro_rules! string_commands {
+    ($m:ident) => {
+        // Hot-path first for better branch prediction.
+        $m!(string, get, cmd_get);
+        $m!(string, set, cmd_set);
+        $m!(string, mget, cmd_mget);
+        $m!(string, mset, cmd_mset);
+        $m!(string, incr, cmd_incr);
+        $m!(string, decr, cmd_decr);
+        $m!(string, incrby, cmd_incrby);
+        $m!(string, decrby, cmd_decrby);
+        $m!(string, setnx, cmd_setnx);
+        $m!(string, setex, cmd_setex);
+        $m!(string, psetex, cmd_psetex);
+        $m!(string, append, cmd_append);
+        $m!(string, strlen, cmd_strlen);
+        $m!(string, getrange, cmd_getrange);
+        $m!(string, setrange, cmd_setrange);
+        $m!(string, getset, cmd_getset);
+        $m!(string, msetnx, cmd_msetnx);
+        $m!(string, incrbyfloat, cmd_incrbyfloat);
+        $m!(string, substr, cmd_substr);
+    };
 }
+pub(crate) use string_commands;
 
 pub fn cmd_append(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;

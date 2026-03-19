@@ -17,14 +17,12 @@ pub fn replay_commands(path: &Path, db: Arc<dyn StorageEngine + Send + Sync>) ->
     let mut response_sink = Vec::new();
 
     while cursor < bytes.len() {
-        let (argv, consumed) = parse_argv_frame(&bytes[cursor..])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "incomplete command at end of AOF file",
-                )
-            })?;
+        let (argv, consumed) = parse_argv_frame(&bytes[cursor..]).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "incomplete command at end of AOF file",
+            )
+        })?;
         response_sink.clear();
         execute_argv_command(&argv, &replay_ctx, &mut response_sink)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;

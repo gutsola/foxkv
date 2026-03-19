@@ -1,6 +1,7 @@
 use std::io;
 use std::sync::Arc;
 
+use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -11,35 +12,29 @@ use crate::resp::append_error_response;
 const READ_BUF_SIZE: usize = 16 * 1024;
 
 pub async fn handle_connection(mut stream: TcpStream, ctx: Arc<AppContext>) -> io::Result<()> {
-    let mut read_buf = [0_u8; READ_BUF_SIZE];
-    let mut buffer = Vec::with_capacity(4096);
-    let mut read_pos = 0_usize;
+    let mut buffer = BytesMut::with_capacity(4096);
     let mut response_buf = Vec::with_capacity(READ_BUF_SIZE);
 
     loop {
-        let n = stream.read(&mut read_buf).await?;
+        let n = stream.read_buf(&mut buffer).await?;
         if n == 0 {
             return Ok(());
         }
-        buffer.extend_from_slice(&read_buf[..n]);
         response_buf.clear();
 
         loop {
-            let parsed = parse_argv_frame(&buffer[read_pos..]);
-            let (argv, consumed) = match parsed {
-                Ok(Some(value)) => value,
-                Ok(None) => break,
-                Err(err) => {
+            let consumed = {
+                let parsed = parse_argv_frame(buffer.as_ref());
+                let (argv, consumed) = match parsed {
+                    Some(value) => value,
+                    None => break,
+                };
+                if let Err(err) = execute_argv_command(&argv, ctx.as_ref(), &mut response_buf) {
                     append_error_response(&mut response_buf, &err);
-                    buffer.clear();
-                    read_pos = 0;
-                    break;
                 }
+                consumed
             };
-            if let Err(err) = execute_argv_command(&argv, ctx.as_ref(), &mut response_buf) {
-                append_error_response(&mut response_buf, &err);
-            }
-            read_pos += consumed;
+            let _ = buffer.split_to(consumed);
         }
 
         if !response_buf.is_empty() {

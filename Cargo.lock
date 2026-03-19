@@ -79,9 +79,12 @@ name = "foxkv"
 version = "0.1.0"
 dependencies = [
  "ahash",
+ "bytes",
  "csv",
  "dashmap",
+ "itoa",
  "memchr",
+ "smallvec",
  "tokio",
 ]
 

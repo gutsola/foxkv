@@ -77,6 +77,14 @@ impl StorageEngine for DashMapStorageEngine {
 
     fn put_if_absent(&self, key: &[u8], entry: ValueEntry) -> bool {
         let now = now_ms();
+        if let Some(mut occupied) = self.inner.get_mut(key) {
+            if is_expired(&occupied, now) {
+                *occupied = entry;
+                return true;
+            }
+            return false;
+        }
+
         match self.inner.entry(key.to_vec()) {
             DashEntry::Vacant(vacant) => {
                 vacant.insert(entry);
@@ -95,18 +103,16 @@ impl StorageEngine for DashMapStorageEngine {
 
     fn put_if_present(&self, key: &[u8], entry: ValueEntry) -> bool {
         let now = now_ms();
-        match self.inner.entry(key.to_vec()) {
-            DashEntry::Vacant(_) => false,
-            DashEntry::Occupied(mut occupied) => {
-                if is_expired(occupied.get(), now) {
-                    occupied.remove();
-                    false
-                } else {
-                    occupied.insert(entry);
-                    true
-                }
-            }
+        let Some(mut occupied) = self.inner.get_mut(key) else {
+            return false;
+        };
+        if is_expired(&occupied, now) {
+            drop(occupied);
+            self.inner.remove(key);
+            return false;
         }
+        *occupied = entry;
+        true
     }
 
     fn remove_entry(&self, key: &[u8]) -> bool {

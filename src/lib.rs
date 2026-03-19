@@ -6,7 +6,3 @@ mod resp;
 
 pub mod server;
 pub mod storage;
-
-pub fn warm_up_command_registry() {
-    command::init_command_registry();
-}

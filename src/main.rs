@@ -8,10 +8,8 @@ use foxkv::config::{self, AppConfig};
 use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
 use foxkv::server::run_redis_server;
 use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
-use foxkv::warm_up_command_registry;
 
 fn main() -> io::Result<()> {
-    warm_up_command_registry();
     let config = load_config_from_args()
         .map_err(|err| io::Error::other(format!("failed to load config: {err}")))?;
     let cpu_count = thread::available_parallelism()
