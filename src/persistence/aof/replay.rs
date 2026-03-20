@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::app_context::AppContext;
 use crate::command::{execute_argv_command, parse_argv_frame};
 use crate::config::default_config;
+use crate::replication::ReplicationManager;
 use crate::storage::StorageEngine;
 
 pub fn replay_commands(path: &Path, db: Arc<dyn StorageEngine + Send + Sync>) -> io::Result<()> {
@@ -13,7 +14,14 @@ pub fn replay_commands(path: &Path, db: Arc<dyn StorageEngine + Send + Sync>) ->
     }
     let bytes = std::fs::read(path)?;
     let mut cursor = 0_usize;
-    let replay_ctx = AppContext::new(default_config(), db, None, None, None);
+    let replay_ctx = AppContext::new(
+        default_config(),
+        db,
+        None,
+        None,
+        None,
+        Arc::new(ReplicationManager::new()),
+    );
     let mut response_sink = Vec::new();
 
     while cursor < bytes.len() {

@@ -10,6 +10,7 @@ use foxkv::config::model::ReplicationConfig;
 use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
 use foxkv::persistence::rdb::RdbDirtyTracker;
 use foxkv::persistence::rdb_dirty_wrapper::StorageWithRdbDirty;
+use foxkv::replication::ReplicationManager;
 use foxkv::server::run_server;
 use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 
@@ -85,12 +86,15 @@ fn main() -> io::Result<()> {
 
     eprintln!("# Ready to accept connections");
 
+    let replication = Arc::new(ReplicationManager::new());
+
     let ctx = Arc::new(AppContext::new(
         config.clone(),
         db,
         aof,
         rdb_dirty_tracker,
         rdb_bgsave_in_progress,
+        replication,
     ));
     runtime.block_on(async {
         let server = run_server(&addr, ctx.clone());

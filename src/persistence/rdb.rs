@@ -120,6 +120,18 @@ pub fn save(
     Ok(())
 }
 
+/// Build an in-memory RDB snapshot payload for replication FULLRESYNC.
+/// Returns the raw RDB bytes without RESP framing.
+pub fn build_rdb_snapshot_bytes(db: &dyn StorageEngine, with_checksum: bool) -> io::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    write_rdb(db, &mut buf)?;
+    if with_checksum {
+        let checksum = crc64(0, &buf);
+        buf.extend_from_slice(&checksum.to_le_bytes());
+    }
+    Ok(buf)
+}
+
 /// Load database from RDB file. Returns number of keys loaded.
 pub fn load(db: &dyn StorageEngine, path: &PathBuf) -> io::Result<usize> {
     if !path.exists() {

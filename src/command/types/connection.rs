@@ -38,7 +38,7 @@ pub fn cmd_echo(args: &[&[u8]], _ctx: &AppContext, out: &mut Vec<u8>) -> Result<
     Ok(())
 }
 
-pub fn cmd_hello(args: &[&[u8]], _ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn cmd_hello(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     // HELLO [protover [AUTH username password] [SETNAME clientname]]
     // Without args or protover=2: RESP2 format (array of alternating key-value pairs)
     let protover = args
@@ -58,10 +58,20 @@ pub fn cmd_hello(args: &[&[u8]], _ctx: &AppContext, out: &mut Vec<u8>) -> Result
     append_integer_response(out, 2);
     append_bulk_response(out, Some(b"id"));
     append_integer_response(out, 0);
+    let mode = if ctx.config.is_replica() {
+        b"replica".as_slice()
+    } else {
+        b"standalone".as_slice()
+    };
+    let role = if ctx.config.is_replica() {
+        b"slave".as_slice()
+    } else {
+        b"master".as_slice()
+    };
     append_bulk_response(out, Some(b"mode"));
-    append_bulk_response(out, Some(b"standalone"));
+    append_bulk_response(out, Some(mode));
     append_bulk_response(out, Some(b"role"));
-    append_bulk_response(out, Some(b"master"));
+    append_bulk_response(out, Some(role));
     append_bulk_response(out, Some(b"modules"));
     out.extend_from_slice(b"*0\r\n");
     Ok(())

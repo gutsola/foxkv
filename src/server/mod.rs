@@ -10,6 +10,7 @@ use crate::persistence::rdb::{maybe_trigger_bgsave, RdbRuntimeConfig};
 mod connection;
 
 pub async fn run_server(addr: &str, ctx: Arc<AppContext>) -> io::Result<()> {
+    ctx.replication.start_ingress_worker();
     spawn_rdb_save_rules_task(&ctx);
 
     let listener = TcpListener::bind(addr).await?;

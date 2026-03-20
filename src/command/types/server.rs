@@ -193,6 +193,34 @@ pub fn cmd_info(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
         buf.push_str("# Keyspace\r\n");
         buf.push_str(&format!("db0:keys={}\r\n", keys_count));
     }
+    if section.eq_ignore_ascii_case("all")
+        || section.eq_ignore_ascii_case("replication")
+        || section.eq_ignore_ascii_case("default")
+    {
+        let m = ctx.replication.replication_metrics();
+        let role = if ctx.config.is_replica() { "slave" } else { "master" };
+        buf.push_str("# Replication\r\n");
+        buf.push_str(&format!("role:{role}\r\n"));
+        buf.push_str(&format!("master_replid:{}\r\n", m.replid));
+        buf.push_str(&format!("master_repl_offset:{}\r\n", m.master_offset));
+        buf.push_str(&format!("replica_ack_offset:{}\r\n", m.last_ack_offset));
+        buf.push_str(&format!("replica_lag_bytes:{}\r\n", m.lag_bytes));
+        buf.push_str(&format!(
+            "replica_ack_age_ms:{}\r\n",
+            m.last_ack_age_ms
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "-1".to_string())
+        ));
+        buf.push_str(&format!("replica_ack_count:{}\r\n", m.ack_count));
+        buf.push_str(&format!(
+            "replication_capture_writes:{}\r\n",
+            if m.capture_writes { 1 } else { 0 }
+        ));
+        buf.push_str(&format!(
+            "replication_dropped_ingress_writes:{}\r\n",
+            m.dropped_ingress_writes
+        ));
+    }
     if buf.is_empty() {
         buf.push_str(&format!("# {}\r\n\r\n", section));
     }
