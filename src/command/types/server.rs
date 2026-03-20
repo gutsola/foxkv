@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::wire::append_array_header;
+use crate::config::model::ReplicationConfig;
 use crate::resp::{append_bulk_response, append_integer_response, append_simple_response};
 
 macro_rules! server_commands {
@@ -98,6 +99,13 @@ pub fn cmd_config(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
         ("client-output-buffer-limit", client_output_buffer_limit_value),
         ("lua-time-limit", config.lua_time_limit.to_string()),
         ("hz", config.hz.to_string()),
+        (
+            "replicaof",
+            match &config.replication {
+                ReplicationConfig::Master => "no one".to_string(),
+                ReplicationConfig::Replica { host, port } => format!("{host} {port}"),
+            },
+        ),
     ];
     let mut pairs: Vec<(&str, String)> = Vec::new();
     let want_all = patterns.iter().any(|p| *p == b"*");
@@ -151,7 +159,12 @@ pub fn cmd_info(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
     {
         buf.push_str("# Server\r\n");
         buf.push_str(&format!("redis_version:{}\r\n", SERVER_VERSION));
-        buf.push_str("redis_mode:standalone\r\n");
+        let redis_mode = if ctx.config.is_replica() {
+            "replica"
+        } else {
+            "standalone"
+        };
+        buf.push_str(&format!("redis_mode:{redis_mode}\r\n"));
     }
     if section.eq_ignore_ascii_case("all")
         || section.eq_ignore_ascii_case("clients")

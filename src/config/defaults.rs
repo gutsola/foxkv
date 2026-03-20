@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::config::model::{
     AofConfig, AppConfig, AppendFsyncPolicy, ClientOutputBufferLimit, ClientOutputBufferLimits,
-    RdbConfig,
+    RdbConfig, ReplicationConfig,
 };
 
 pub fn default_config() -> AppConfig {
@@ -48,5 +48,6 @@ pub fn default_config() -> AppConfig {
         },
         lua_time_limit: 5000,
         hz: 1,
+        replication: ReplicationConfig::Master,
     }
 }

@@ -1,4 +1,7 @@
-use crate::config::{ConfigError, model::AppConfig};
+use crate::config::{
+    ConfigError,
+    model::{AppConfig, ReplicationConfig},
+};
 
 pub fn validate_config(config: &AppConfig) -> Result<(), ConfigError> {
     if config.bind.is_empty() {
@@ -32,6 +35,18 @@ pub fn validate_config(config: &AppConfig) -> Result<(), ConfigError> {
         return Err(ConfigError::Validate(
             "appendfilename must not be empty".to_string(),
         ));
+    }
+    if let ReplicationConfig::Replica { host, port } = &config.replication {
+        if host.trim().is_empty() {
+            return Err(ConfigError::Validate(
+                "replicaof host must not be empty".to_string(),
+            ));
+        }
+        if *port == 0 {
+            return Err(ConfigError::Validate(
+                "replicaof port must be in range 1..=65535".to_string(),
+            ));
+        }
     }
     Ok(())
 }

@@ -6,6 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use foxkv::app_context::AppContext;
 use foxkv::config::{self, AppConfig};
+use foxkv::config::model::ReplicationConfig;
 use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
 use foxkv::persistence::rdb::RdbDirtyTracker;
 use foxkv::persistence::rdb_dirty_wrapper::StorageWithRdbDirty;
@@ -28,7 +29,11 @@ fn main() -> io::Result<()> {
     );
     eprintln!("# Configuration loaded");
 
-    print_startup_logo(config.port, pid);
+    let running_mode = match &config.replication {
+        ReplicationConfig::Master => "standalone",
+        ReplicationConfig::Replica { .. } => "replica",
+    };
+    print_startup_logo(config.port, pid, running_mode);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(write_threads)
@@ -119,10 +124,10 @@ async fn wait_for_shutdown_signal() {
     tokio::signal::ctrl_c().await.expect("failed to listen for Ctrl+C");
 }
 
-fn print_startup_logo(port: u16, pid: u32) {
+fn print_startup_logo(port: u16, pid: u32, mode: &str) {
     let logo = r#"          /\   /\
          /  \_/  \            Foxkv {version} 64 bit
-        |  o   o  |           Running in standalone mode
+        |  o   o  |           Running in {mode} mode
          \   w   /            Port: {port}
           \_____/             PID: {pid}
          /       \
@@ -131,6 +136,7 @@ fn print_startup_logo(port: u16, pid: u32) {
     eprint!(
         "{}",
         logo.replace("{version}", VERSION)
+            .replace("{mode}", mode)
             .replace("{port}", &port.to_string())
             .replace("{pid}", &pid.to_string())
     );

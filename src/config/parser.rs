@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::config::ConfigError;
 use crate::config::model::{
-    AppConfig, AppendFsyncPolicy, ClientOutputBufferLimit, SaveRule,
+    AppConfig, AppendFsyncPolicy, ClientOutputBufferLimit, ReplicationConfig, SaveRule,
 };
 
 pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), ConfigError> {
@@ -32,6 +32,32 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                     )));
                 }
                 config.port = parse_u16(&tokens[1], "port", line_no + 1)?;
+            }
+            "replicaof" | "slaveof" => {
+                if tokens.len() != 3 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: {} expects <host> <port> or 'no one'",
+                        line_no + 1,
+                        key
+                    )));
+                }
+                if tokens[1].eq_ignore_ascii_case("no") && tokens[2].eq_ignore_ascii_case("one") {
+                    config.replication = ReplicationConfig::Master;
+                    continue;
+                }
+                let host = tokens[1].trim();
+                if host.is_empty() {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: {} host must not be empty",
+                        line_no + 1,
+                        key
+                    )));
+                }
+                let port = parse_u16(&tokens[2], "replicaof port", line_no + 1)?;
+                config.replication = ReplicationConfig::Replica {
+                    host: host.to_string(),
+                    port,
+                };
             }
             "save" => {
                 if !seen_save {
@@ -379,4 +405,31 @@ fn parse_size_bytes(raw: &str, line_no: usize) -> Result<u64, ConfigError> {
         .map_err(|_| ConfigError::Parse(format!("line {}: invalid size '{}'", line_no, raw)))?;
     num.checked_mul(factor)
         .ok_or_else(|| ConfigError::Parse(format!("line {}: size overflow '{}'", line_no, raw)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_redis_conf;
+    use crate::config::{default_config, model::ReplicationConfig};
+
+    #[test]
+    fn parse_replicaof_sets_replica_role() {
+        let mut cfg = default_config();
+        apply_redis_conf("replicaof 10.0.0.8 6380", &mut cfg).expect("parse replicaof");
+        assert_eq!(
+            cfg.replication,
+            ReplicationConfig::Replica {
+                host: "10.0.0.8".to_string(),
+                port: 6380,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_slaveof_no_one_resets_master_role() {
+        let mut cfg = default_config();
+        apply_redis_conf("replicaof 10.0.0.8 6380", &mut cfg).expect("parse replicaof");
+        apply_redis_conf("slaveof no one", &mut cfg).expect("parse slaveof no one");
+        assert_eq!(cfg.replication, ReplicationConfig::Master);
+    }
 }

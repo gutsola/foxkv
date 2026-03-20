@@ -58,6 +58,12 @@ pub struct AofConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReplicationConfig {
+    Master,
+    Replica { host: String, port: u16 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub bind: Vec<String>,
     pub port: u16,
@@ -73,11 +79,17 @@ pub struct AppConfig {
     pub lua_time_limit: u32,
     /// hz，后台任务执行频率
     pub hz: u32,
+    /// 主从复制角色
+    pub replication: ReplicationConfig,
 }
 
 impl AppConfig {
     pub fn listen_addr(&self) -> String {
         let bind = self.bind.first().map(String::as_str).unwrap_or("127.0.0.1");
         format!("{bind}:{}", self.port)
+    }
+
+    pub fn is_replica(&self) -> bool {
+        matches!(self.replication, ReplicationConfig::Replica { .. })
     }
 }
