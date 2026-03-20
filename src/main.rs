@@ -87,7 +87,36 @@ fn main() -> io::Result<()> {
         rdb_dirty_tracker,
         rdb_bgsave_in_progress,
     ));
-    runtime.block_on(run_server(&addr, ctx))
+    runtime.block_on(async {
+        let server = run_server(&addr, ctx.clone());
+        tokio::select! {
+            _ = server => {}
+            _ = wait_for_shutdown_signal() => {
+                if let Some(ref aof) = ctx.aof {
+                    if let Err(e) = aof.sync_data() {
+                        eprintln!("# AOF sync failed: {e}");
+                    }
+                }
+                eprintln!("Bye Bye!");
+            }
+        }
+    });
+    Ok(())
+}
+
+#[cfg(unix)]
+async fn wait_for_shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = sigterm.recv() => {}
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_shutdown_signal() {
+    tokio::signal::ctrl_c().await.expect("failed to listen for Ctrl+C");
 }
 
 fn print_startup_logo(port: u16, pid: u32) {

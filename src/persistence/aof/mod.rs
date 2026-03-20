@@ -171,7 +171,7 @@ impl AofEngine {
         });
     }
 
-    fn sync_data(&self) -> io::Result<()> {
+    pub fn sync_data(&self) -> io::Result<()> {
         let file = self
             .inner
             .file
