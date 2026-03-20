@@ -39,6 +39,8 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                     seen_save = true;
                 }
                 if tokens.len() == 2 && tokens[1].is_empty() {
+                    // save "" removes all previously configured save points (Redis semantics)
+                    config.rdb.save_rules.clear();
                     continue;
                 }
                 if tokens.len() != 3 {

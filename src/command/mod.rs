@@ -1,6 +1,6 @@
 use smallvec::SmallVec;
 
-mod shared;
+pub mod shared;
 pub mod types;
 
 use crate::app_context::AppContext;
@@ -107,7 +107,7 @@ mod tests {
         let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
             DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"),
         );
-        let ctx = AppContext::new(default_config(), db, None);
+        let ctx = AppContext::new(default_config(), db, None, None, None);
         let set = b"*3\r\n$3\r\nSET\r\n$2\r\nk1\r\n$2\r\nv1\r\n";
         let get = b"*2\r\n$3\r\nGET\r\n$2\r\nk1\r\n";
 
@@ -129,7 +129,7 @@ mod tests {
         let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
             DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"),
         );
-        let ctx = AppContext::new(default_config(), db, None);
+        let ctx = AppContext::new(default_config(), db, None, None, None);
         // ZADD key 1 a 2 b (6 args: ZADD, key, score1, member1, score2, member2)
         let zadd = b"*6\r\n$4\r\nZADD\r\n$3\r\nkey\r\n$1\r\n1\r\n$1\r\na\r\n$1\r\n2\r\n$1\r\nb\r\n";
 

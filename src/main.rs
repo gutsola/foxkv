@@ -1,12 +1,15 @@
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use foxkv::app_context::AppContext;
 use foxkv::config::{self, AppConfig};
 use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
-use foxkv::server::run_redis_server;
+use foxkv::persistence::rdb::RdbDirtyTracker;
+use foxkv::persistence::rdb_dirty_wrapper::StorageWithRdbDirty;
+use foxkv::server::run_server;
 use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -32,7 +35,7 @@ fn main() -> io::Result<()> {
         .enable_all()
         .build()?;
 
-    let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
+    let raw_db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
         DashMapStorageEngine::new(DbConfig {
             worker_count: write_threads,
         })
@@ -42,7 +45,7 @@ fn main() -> io::Result<()> {
     eprintln!("# Server initialized");
 
     let load_start = Instant::now();
-    let aof = initialize_aof(&config, db.clone())
+    let aof = initialize_aof(&config, raw_db.clone())
         .map_err(|err| io::Error::other(format!("failed to initialize aof: {err}")))?;
     let load_elapsed = load_start.elapsed();
     let load_secs = load_elapsed.as_secs_f64();
@@ -56,10 +59,35 @@ fn main() -> io::Result<()> {
         eprintln!("# DB loaded from disk: {:.3} seconds", load_secs);
     }
 
+    let (db, rdb_dirty_tracker, rdb_bgsave_in_progress): (
+        Arc<dyn StorageEngine + Send + Sync>,
+        Option<Arc<RdbDirtyTracker>>,
+        Option<Arc<AtomicBool>>,
+    ) = if config.rdb.save_rules.is_empty() {
+        eprintln!("# RDB disabled (no save rules)");
+        (raw_db, None, None)
+    } else {
+        let tracker = Arc::new(RdbDirtyTracker::new());
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        tracker.set_last_save(now_secs);
+        let bgsave_in_progress = Arc::new(AtomicBool::new(false));
+        let wrapped = Arc::new(StorageWithRdbDirty::new(raw_db, tracker.clone()));
+        (wrapped, Some(tracker), Some(bgsave_in_progress))
+    };
+
     eprintln!("# Ready to accept connections");
 
-    let ctx = Arc::new(AppContext::new(config.clone(), db, aof));
-    runtime.block_on(run_redis_server(&addr, ctx))
+    let ctx = Arc::new(AppContext::new(
+        config.clone(),
+        db,
+        aof,
+        rdb_dirty_tracker,
+        rdb_bgsave_in_progress,
+    ));
+    runtime.block_on(run_server(&addr, ctx))
 }
 
 fn print_startup_logo(port: u16, pid: u32) {

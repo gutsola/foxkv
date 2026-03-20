@@ -13,7 +13,7 @@ pub fn replay_commands(path: &Path, db: Arc<dyn StorageEngine + Send + Sync>) ->
     }
     let bytes = std::fs::read(path)?;
     let mut cursor = 0_usize;
-    let replay_ctx = AppContext::new(default_config(), db, None);
+    let replay_ctx = AppContext::new(default_config(), db, None, None, None);
     let mut response_sink = Vec::new();
 
     while cursor < bytes.len() {

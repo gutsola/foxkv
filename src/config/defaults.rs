@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::config::model::{
     AofConfig, AppConfig, AppendFsyncPolicy, ClientOutputBufferLimit, ClientOutputBufferLimits,
-    RdbConfig, SaveRule,
+    RdbConfig,
 };
 
 pub fn default_config() -> AppConfig {
@@ -10,20 +10,7 @@ pub fn default_config() -> AppConfig {
         bind: vec!["127.0.0.1".to_string()],
         port: 6380,
         rdb: RdbConfig {
-            save_rules: vec![
-                SaveRule {
-                    seconds: 900,
-                    changes: 1,
-                },
-                SaveRule {
-                    seconds: 300,
-                    changes: 10,
-                },
-                SaveRule {
-                    seconds: 60,
-                    changes: 10_000,
-                },
-            ],
+            save_rules: vec![],
             dbfilename: "dump.rdb".to_string(),
             dir: PathBuf::from("./"),
             stop_writes_on_bgsave_error: true,
@@ -60,6 +47,6 @@ pub fn default_config() -> AppConfig {
             },
         },
         lua_time_limit: 5000,
-        hz: 10,
+        hz: 1,
     }
 }
