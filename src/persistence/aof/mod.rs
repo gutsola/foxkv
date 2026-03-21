@@ -198,3 +198,354 @@ impl AofEngine {
         self.append_encoded(encoder::encode_command(cmd, args))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::command::SetCondition;
+    use crate::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
+
+    fn temp_aof_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("foxkv_test_{}.aof", name))
+    }
+
+    fn cleanup(path: &PathBuf) {
+        let _ = fs::remove_file(path);
+    }
+
+    fn create_test_engine(path: &PathBuf) -> AofEngine {
+        cleanup(path);
+        let config = AofRuntimeConfig {
+            enabled: true,
+            file_path: path.clone(),
+            appendfsync: AppendFsyncPolicy::No,
+            auto_rewrite_percentage: 0,
+            auto_rewrite_min_size_bytes: 0,
+            use_rdb_preamble: false,
+        };
+        AofEngine::open(config).expect("failed to open aof engine")
+    }
+
+    fn test_db() -> Arc<dyn StorageEngine + Send + Sync> {
+        Arc::new(DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"))
+    }
+
+    #[test]
+    fn aof_runtime_config_from_config_converts_correctly() {
+        let base_dir = std::path::Path::new("/data");
+        let cfg = AofConfig {
+            enabled: true,
+            appendfilename: "appendonly.aof".to_string(),
+            appendfsync: AppendFsyncPolicy::EverySec,
+            auto_rewrite_percentage: 100,
+            auto_rewrite_min_size_bytes: 64 * 1024 * 1024,
+            use_rdb_preamble: true,
+            aof_rewrite_incremental_fsync: true,
+        };
+        let runtime = AofRuntimeConfig::from_config(base_dir, &cfg);
+        assert!(runtime.enabled);
+        assert_eq!(runtime.file_path, PathBuf::from("/data/appendonly.aof"));
+        assert_eq!(runtime.appendfsync, AppendFsyncPolicy::EverySec);
+        assert_eq!(runtime.auto_rewrite_percentage, 100);
+        assert_eq!(runtime.auto_rewrite_min_size_bytes, 64 * 1024 * 1024);
+        assert!(runtime.use_rdb_preamble);
+    }
+
+    #[test]
+    fn aof_engine_open_creates_file_if_not_exists() {
+        let path = temp_aof_path("open_creates");
+        cleanup(&path);
+        let _engine = create_test_engine(&path);
+        assert!(path.exists());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_set_writes_to_file() {
+        let path = temp_aof_path("append_set");
+        let engine = create_test_engine(&path);
+        engine.append_set(b"mykey", b"myvalue", None, SetCondition::None).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_set_with_ttl_writes_px_option() {
+        let path = temp_aof_path("append_set_ttl");
+        let engine = create_test_engine(&path);
+        engine.append_set(b"key", b"val", Some(5000), SetCondition::None).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.windows(2).any(|w| w == b"PX"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_set_with_condition_writes_nx_or_xx() {
+        let path = temp_aof_path("append_set_nx");
+        let engine = create_test_engine(&path);
+        engine.append_set(b"key", b"val", None, SetCondition::Nx).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.windows(2).any(|w| w == b"NX"));
+        cleanup(&path);
+
+        let path = temp_aof_path("append_set_xx");
+        let engine = create_test_engine(&path);
+        engine.append_set(b"key", b"val", None, SetCondition::Xx).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.windows(2).any(|w| w == b"XX"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_setnx_writes_correct_command() {
+        let path = temp_aof_path("append_setnx");
+        let engine = create_test_engine(&path);
+        engine.append_setnx(b"key", b"value").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$5\r\nSETNX\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_getset_writes_correct_command() {
+        let path = temp_aof_path("append_getset");
+        let engine = create_test_engine(&path);
+        engine.append_getset(b"key", b"newvalue").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$6\r\nGETSET\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_append_writes_correct_command() {
+        let path = temp_aof_path("append_append");
+        let engine = create_test_engine(&path);
+        engine.append_append(b"key", b"suffix").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$6\r\nAPPEND\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_incr_writes_correct_command() {
+        let path = temp_aof_path("append_incr");
+        let engine = create_test_engine(&path);
+        engine.append_incr(b"counter").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*2\r\n$4\r\nINCR\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_incrby_writes_correct_command() {
+        let path = temp_aof_path("append_incrby");
+        let engine = create_test_engine(&path);
+        engine.append_incrby(b"counter", b"10").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$6\r\nINCRBY\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_incrbyfloat_writes_correct_command() {
+        let path = temp_aof_path("append_incrbyfloat");
+        let engine = create_test_engine(&path);
+        engine.append_incrbyfloat(b"counter", b"2.5").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$11\r\nINCRBYFLOAT\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_decr_writes_correct_command() {
+        let path = temp_aof_path("append_decr");
+        let engine = create_test_engine(&path);
+        engine.append_decr(b"counter").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*2\r\n$4\r\nDECR\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_decrby_writes_correct_command() {
+        let path = temp_aof_path("append_decrby");
+        let engine = create_test_engine(&path);
+        engine.append_decrby(b"counter", b"5").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$6\r\nDECRBY\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_setrange_writes_correct_command() {
+        let path = temp_aof_path("append_setrange");
+        let engine = create_test_engine(&path);
+        engine.append_setrange(b"key", b"0", b"value").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*4\r\n$8\r\nSETRANGE\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_mset_writes_correct_command() {
+        let path = temp_aof_path("append_mset");
+        let engine = create_test_engine(&path);
+        engine.append_mset(&[(b"k1", b"v1"), (b"k2", b"v2")]).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*5\r\n$4\r\nMSET\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_mset_args_writes_correct_command() {
+        let path = temp_aof_path("append_mset_args");
+        let engine = create_test_engine(&path);
+        engine.append_mset_args(&[b"k1", b"v1", b"k2", b"v2"]).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*5\r\n$4\r\nMSET\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_msetnx_writes_correct_command() {
+        let path = temp_aof_path("append_msetnx");
+        let engine = create_test_engine(&path);
+        engine.append_msetnx(&[(b"k1", b"v1")]).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$6\r\nMSETNX\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_msetnx_args_writes_correct_command() {
+        let path = temp_aof_path("append_msetnx_args");
+        let engine = create_test_engine(&path);
+        engine.append_msetnx_args(&[b"k1", b"v1"]).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$6\r\nMSETNX\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_del_writes_correct_command() {
+        let path = temp_aof_path("append_del");
+        let engine = create_test_engine(&path);
+        engine.append_del(&[b"key1", b"key2"]).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$3\r\nDEL\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_flushall_writes_correct_command() {
+        let path = temp_aof_path("append_flushall");
+        let engine = create_test_engine(&path);
+        engine.append_flushall().unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*1\r\n$9\r\nFLUSHALL\r\n"), "actual contents: {:?}", String::from_utf8_lossy(&contents));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_expire_writes_correct_command() {
+        let path = temp_aof_path("append_expire");
+        let engine = create_test_engine(&path);
+        engine.append_expire(b"key", b"60").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$6\r\nEXPIRE\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_expireat_writes_correct_command() {
+        let path = temp_aof_path("append_expireat");
+        let engine = create_test_engine(&path);
+        engine.append_expireat(b"key", b"1700000000").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$8\r\nEXPIREAT\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_pexpire_writes_correct_command() {
+        let path = temp_aof_path("append_pexpire");
+        let engine = create_test_engine(&path);
+        engine.append_pexpire(b"key", b"5000").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$7\r\nPEXPIRE\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_pexpireat_writes_correct_command() {
+        let path = temp_aof_path("append_pexpireat");
+        let engine = create_test_engine(&path);
+        engine.append_pexpireat(b"key", b"1700000000000").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*3\r\n$9\r\nPEXPIREAT\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_append_persist_writes_correct_command() {
+        let path = temp_aof_path("append_persist");
+        let engine = create_test_engine(&path);
+        engine.append_persist(b"key").unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"*2\r\n$7\r\nPERSIST\r\n"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_multiple_appends_accumulate_in_file() {
+        let path = temp_aof_path("multiple_appends");
+        let engine = create_test_engine(&path);
+        engine.append_set(b"k1", b"v1", None, SetCondition::None).unwrap();
+        engine.append_set(b"k2", b"v2", None, SetCondition::None).unwrap();
+        engine.append_del(&[b"k1"]).unwrap();
+        engine.sync_data().unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.windows(3).any(|w| w == b"SET"));
+        assert!(contents.windows(3).any(|w| w == b"DEL"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn aof_engine_sync_data_succeeds_after_write() {
+        let path = temp_aof_path("sync_data");
+        let engine = create_test_engine(&path);
+        engine.append_set(b"key", b"value", None, SetCondition::None).unwrap();
+        let result = engine.sync_data();
+        assert!(result.is_ok());
+        cleanup(&path);
+    }
+}

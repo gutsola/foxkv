@@ -493,3 +493,421 @@ fn encode_hash(map: &BTreeMap<Vec<u8>, Vec<u8>>) -> Vec<u8> {
     use crate::command::shared::typed_value::encode_hash;
     encode_hash(map)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    use bytes::Bytes;
+
+    use super::*;
+    use crate::config::model::{RdbConfig, SaveRule};
+    use crate::storage::{DashMapStorageEngine, DbConfig, StorageEngine, ValueEntry};
+
+    fn temp_rdb_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("foxkv_rdb_test_{}.rdb", name))
+    }
+
+    fn cleanup(path: &PathBuf) {
+        let _ = fs::remove_file(path);
+    }
+
+    fn test_db() -> Arc<dyn StorageEngine + Send + Sync> {
+        Arc::new(DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"))
+    }
+
+    fn create_test_config(path: &PathBuf) -> RdbRuntimeConfig {
+        RdbRuntimeConfig {
+            file_path: path.clone(),
+            save_rules: vec![SaveRule { seconds: 900, changes: 1 }],
+            rdbchecksum: true,
+        }
+    }
+
+    #[test]
+    fn rdb_runtime_config_from_config_converts_correctly() {
+        let cfg = RdbConfig {
+            save_rules: vec![SaveRule { seconds: 60, changes: 10 }],
+            dbfilename: "dump.rdb".to_string(),
+            dir: PathBuf::from("/data"),
+            stop_writes_on_bgsave_error: true,
+            rdbcompression: true,
+            rdbchecksum: false,
+            rdb_save_incremental_fsync: true,
+        };
+        let runtime = RdbRuntimeConfig::from_config(&cfg);
+        assert_eq!(runtime.file_path, PathBuf::from("/data/dump.rdb"));
+        assert_eq!(runtime.save_rules.len(), 1);
+        assert_eq!(runtime.save_rules[0].seconds, 60);
+        assert_eq!(runtime.save_rules[0].changes, 10);
+        assert!(!runtime.rdbchecksum);
+    }
+
+    #[test]
+    fn rdb_dirty_tracker_incr_dirty_increments_counter() {
+        let tracker = RdbDirtyTracker::new();
+        assert_eq!(tracker.dirty(), 0);
+        tracker.incr_dirty();
+        assert_eq!(tracker.dirty(), 1);
+        tracker.incr_dirty();
+        tracker.incr_dirty();
+        assert_eq!(tracker.dirty(), 3);
+    }
+
+    #[test]
+    fn rdb_dirty_tracker_reset_dirty_sets_counter_to_zero() {
+        let tracker = RdbDirtyTracker::new();
+        tracker.incr_dirty();
+        tracker.incr_dirty();
+        assert_eq!(tracker.dirty(), 2);
+        tracker.reset_dirty();
+        assert_eq!(tracker.dirty(), 0);
+    }
+
+    #[test]
+    fn rdb_dirty_tracker_set_last_save_updates_timestamp() {
+        let tracker = RdbDirtyTracker::new();
+        tracker.set_last_save(1700000000);
+        assert_eq!(tracker.last_save_time(), 1700000000);
+        tracker.set_last_save(1800000000);
+        assert_eq!(tracker.last_save_time(), 1800000000);
+    }
+
+    #[test]
+    fn save_creates_file_with_valid_rdb_format() {
+        let path = temp_rdb_path("save_creates");
+        cleanup(&path);
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let config = create_test_config(&path);
+        save(db.as_ref(), &config, None).unwrap();
+        assert!(path.exists());
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"REDIS"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn save_with_dirty_tracker_resets_dirty_and_updates_last_save() {
+        let path = temp_rdb_path("save_tracker");
+        cleanup(&path);
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let tracker = RdbDirtyTracker::new();
+        tracker.incr_dirty();
+        tracker.incr_dirty();
+        tracker.set_last_save(0);
+        let config = create_test_config(&path);
+        save(db.as_ref(), &config, Some(&tracker)).unwrap();
+        assert_eq!(tracker.dirty(), 0);
+        assert!(tracker.last_save_time() > 0);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn load_returns_zero_for_nonexistent_file() {
+        let path = temp_rdb_path("nonexistent");
+        cleanup(&path);
+        let db = test_db();
+        let count = load(db.as_ref(), &path).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn load_from_bytes_returns_error_for_invalid_magic() {
+        let db = test_db();
+        let result = load_from_bytes(db.as_ref(), b"INVALID");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_from_bytes_loads_data_from_valid_rdb() {
+        let db1 = test_db();
+        db1.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let bytes = build_rdb_snapshot_bytes(db1.as_ref(), true).unwrap();
+        let db2 = test_db();
+        let count = load_from_bytes(db2.as_ref(), &bytes).unwrap();
+        assert_eq!(count, 1);
+        let entry = db2.get_entry(b"key").expect("key should exist");
+        assert_eq!(entry.value.as_ref(), b"value");
+    }
+
+    #[test]
+    fn save_and_load_roundtrip_preserves_string_data() {
+        let path = temp_rdb_path("roundtrip_string");
+        cleanup(&path);
+        let db = test_db();
+        db.put_entry(
+            b"mykey",
+            ValueEntry {
+                value: Bytes::from("myvalue"),
+                expire_at_ms: None,
+            },
+        );
+        let config = create_test_config(&path);
+        save(db.as_ref(), &config, None).unwrap();
+        let db2 = test_db();
+        let count = load(db2.as_ref(), &path).unwrap();
+        assert_eq!(count, 1);
+        let entry = db2.get_entry(b"mykey").expect("key should exist");
+        assert_eq!(entry.value.as_ref(), b"myvalue");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn save_and_load_roundtrip_preserves_expire_time() {
+        let path = temp_rdb_path("roundtrip_expire");
+        cleanup(&path);
+        let db = test_db();
+        let future_expire = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+            + 3600000;
+        db.put_entry(
+            b"expkey",
+            ValueEntry {
+                value: Bytes::from("expvalue"),
+                expire_at_ms: Some(future_expire),
+            },
+        );
+        let config = create_test_config(&path);
+        save(db.as_ref(), &config, None).unwrap();
+        let db2 = test_db();
+        let count = load(db2.as_ref(), &path).unwrap();
+        assert_eq!(count, 1);
+        let entry = db2.get_entry(b"expkey").expect("key should exist");
+        assert_eq!(entry.value.as_ref(), b"expvalue");
+        assert!(entry.expire_at_ms.is_some());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn save_and_load_roundtrip_multiple_keys() {
+        let path = temp_rdb_path("roundtrip_multi");
+        cleanup(&path);
+        let db = test_db();
+        for i in 0..10 {
+            let key = format!("key{}", i);
+            let value = format!("value{}", i);
+            db.put_entry(
+                key.as_bytes(),
+                ValueEntry {
+                    value: Bytes::from(value),
+                    expire_at_ms: None,
+                },
+            );
+        }
+        let config = create_test_config(&path);
+        save(db.as_ref(), &config, None).unwrap();
+        let db2 = test_db();
+        let count = load(db2.as_ref(), &path).unwrap();
+        assert_eq!(count, 10);
+        for i in 0..10 {
+            let key = format!("key{}", i);
+            let value = format!("value{}", i);
+            let entry = db2.get_entry(key.as_bytes()).expect("key should exist");
+            assert_eq!(entry.value.as_ref(), value.as_bytes());
+        }
+        cleanup(&path);
+    }
+
+    #[test]
+    fn build_rdb_snapshot_bytes_produces_valid_rdb() {
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let bytes = build_rdb_snapshot_bytes(db.as_ref(), true).unwrap();
+        assert!(bytes.starts_with(b"REDIS"));
+        let checksum_bytes = &bytes[bytes.len() - 8..];
+        let stored_checksum = u64::from_le_bytes([
+            checksum_bytes[0],
+            checksum_bytes[1],
+            checksum_bytes[2],
+            checksum_bytes[3],
+            checksum_bytes[4],
+            checksum_bytes[5],
+            checksum_bytes[6],
+            checksum_bytes[7],
+        ]);
+        let computed_checksum = crc64(0, &bytes[..bytes.len() - 8]);
+        assert_eq!(stored_checksum, computed_checksum);
+    }
+
+    #[test]
+    fn build_rdb_snapshot_bytes_without_checksum() {
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let bytes = build_rdb_snapshot_bytes(db.as_ref(), false).unwrap();
+        assert!(bytes.starts_with(b"REDIS"));
+        let computed_checksum = crc64(0, &bytes);
+        assert_ne!(computed_checksum, 0);
+    }
+
+    #[test]
+    fn bgsave_runs_in_background_and_updates_file() {
+        let path = temp_rdb_path("bgsave");
+        cleanup(&path);
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let config = create_test_config(&path);
+        let bgsave_in_progress = Arc::new(AtomicBool::new(false));
+        bgsave(db.clone(), config, None, bgsave_in_progress.clone());
+        thread::sleep(Duration::from_millis(100));
+        let mut attempts = 0;
+        while bgsave_in_progress.load(Ordering::SeqCst) && attempts < 50 {
+            thread::sleep(Duration::from_millis(50));
+            attempts += 1;
+        }
+        assert!(!bgsave_in_progress.load(Ordering::SeqCst));
+        assert!(path.exists());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn bgsave_skips_if_already_in_progress() {
+        let path = temp_rdb_path("bgsave_skip");
+        cleanup(&path);
+        let db = test_db();
+        let config = create_test_config(&path);
+        let bgsave_in_progress = Arc::new(AtomicBool::new(true));
+        bgsave(db.clone(), config, None, bgsave_in_progress.clone());
+        thread::sleep(Duration::from_millis(50));
+        assert!(bgsave_in_progress.load(Ordering::SeqCst));
+        bgsave_in_progress.store(false, Ordering::SeqCst);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn maybe_trigger_bgsave_triggers_when_rule_matches() {
+        let path = temp_rdb_path("maybe_trigger");
+        cleanup(&path);
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let config = RdbRuntimeConfig {
+            file_path: path.clone(),
+            save_rules: vec![SaveRule { seconds: 0, changes: 1 }],
+            rdbchecksum: true,
+        };
+        let tracker = Arc::new(RdbDirtyTracker::new());
+        tracker.incr_dirty();
+        tracker.set_last_save(0);
+        let bgsave_in_progress = Arc::new(AtomicBool::new(false));
+        maybe_trigger_bgsave(db.clone(), config, tracker.clone(), bgsave_in_progress.clone());
+        thread::sleep(Duration::from_millis(100));
+        let mut attempts = 0;
+        while bgsave_in_progress.load(Ordering::SeqCst) && attempts < 50 {
+            thread::sleep(Duration::from_millis(50));
+            attempts += 1;
+        }
+        assert!(path.exists());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn maybe_trigger_bgsave_skips_when_dirty_is_zero() {
+        let path = temp_rdb_path("maybe_skip_zero");
+        cleanup(&path);
+        let db = test_db();
+        let config = create_test_config(&path);
+        let tracker = Arc::new(RdbDirtyTracker::new());
+        let bgsave_in_progress = Arc::new(AtomicBool::new(false));
+        maybe_trigger_bgsave(db.clone(), config, tracker.clone(), bgsave_in_progress.clone());
+        thread::sleep(Duration::from_millis(50));
+        assert!(!path.exists());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn save_creates_parent_directory_if_not_exists() {
+        let temp_dir = std::env::temp_dir().join("foxkv_test_subdir");
+        let _ = fs::remove_dir_all(&temp_dir);
+        let path = temp_dir.join("test.rdb");
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let config = RdbRuntimeConfig {
+            file_path: path.clone(),
+            save_rules: vec![],
+            rdbchecksum: false,
+        };
+        save(db.as_ref(), &config, None).unwrap();
+        assert!(path.exists());
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn save_without_checksum_omits_checksum_bytes() {
+        let path = temp_rdb_path("no_checksum");
+        cleanup(&path);
+        let db = test_db();
+        db.put_entry(
+            b"key",
+            ValueEntry {
+                value: Bytes::from("value"),
+                expire_at_ms: None,
+            },
+        );
+        let config = RdbRuntimeConfig {
+            file_path: path.clone(),
+            save_rules: vec![],
+            rdbchecksum: false,
+        };
+        save(db.as_ref(), &config, None).unwrap();
+        let contents = fs::read(&path).unwrap();
+        assert!(contents.starts_with(b"REDIS"));
+        assert!(contents.windows(1).any(|w| w[0] == RDB_OPCODE_EOF));
+        cleanup(&path);
+    }
+}
