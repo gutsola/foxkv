@@ -48,6 +48,7 @@ pub fn default_config() -> AppConfig {
         },
         lua_time_limit: 5000,
         hz: 1,
+        worker_threads: None,
         replication: ReplicationConfig::Master,
     }
 }

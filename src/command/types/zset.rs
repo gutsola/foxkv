@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::typed_value::{
@@ -501,7 +503,7 @@ fn persist_zset(ctx: &AppContext, key: &[u8], zset: ZSet) {
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value: encode_zset(&zset),
+            value: Bytes::from(encode_zset(&zset)),
             expire_at_ms: None,
         },
     );

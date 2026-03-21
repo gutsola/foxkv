@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::typed_value::{
@@ -384,7 +386,7 @@ fn persist_list(ctx: &AppContext, key: &[u8], list: Vec<Vec<u8>>) {
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value: encode_list(&list),
+            value: Bytes::from(encode_list(&list)),
             expire_at_ms: None,
         },
     );

@@ -100,6 +100,13 @@ pub fn cmd_config(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
         ("lua-time-limit", config.lua_time_limit.to_string()),
         ("hz", config.hz.to_string()),
         (
+            "worker-threads",
+            config
+                .worker_threads
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "auto".to_string()),
+        ),
+        (
             "replicaof",
             match &config.replication {
                 ReplicationConfig::Master => "no one".to_string(),

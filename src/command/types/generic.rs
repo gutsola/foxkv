@@ -52,7 +52,7 @@ pub fn cmd_del(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<()
 pub fn cmd_dump(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let value = ctx.db.get_entry(key).map(|e| e.value);
-    append_bulk_response(out, value.as_deref());
+    append_bulk_response(out, value.as_ref().map(|v| v.as_ref()));
     Ok(())
 }
 

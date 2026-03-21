@@ -264,6 +264,16 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                 }
                 config.hz = parse_u32(&tokens[1], "hz", line_no + 1)?;
             }
+            "worker-threads" => {
+                if tokens.len() != 2 {
+                    return Err(ConfigError::Parse(format!(
+                        "line {}: worker-threads requires one value",
+                        line_no + 1
+                    )));
+                }
+                config.worker_threads =
+                    Some(parse_usize(&tokens[1], "worker-threads", line_no + 1)?);
+            }
             _ => {}
         }
     }
@@ -380,6 +390,15 @@ fn parse_u64(raw: &str, key: &str, line_no: usize) -> Result<u64, ConfigError> {
     })
 }
 
+fn parse_usize(raw: &str, key: &str, line_no: usize) -> Result<usize, ConfigError> {
+    raw.parse::<usize>().map_err(|_| {
+        ConfigError::Parse(format!(
+            "line {}: {} expects usize integer, got '{}'",
+            line_no, key, raw
+        ))
+    })
+}
+
 fn parse_size_bytes(raw: &str, line_no: usize) -> Result<u64, ConfigError> {
     let lower = raw.to_ascii_lowercase();
     if lower.is_empty() {
@@ -431,5 +450,12 @@ mod tests {
         apply_redis_conf("replicaof 10.0.0.8 6380", &mut cfg).expect("parse replicaof");
         apply_redis_conf("slaveof no one", &mut cfg).expect("parse slaveof no one");
         assert_eq!(cfg.replication, ReplicationConfig::Master);
+    }
+
+    #[test]
+    fn parse_worker_threads_sets_runtime_threads() {
+        let mut cfg = default_config();
+        apply_redis_conf("worker-threads 12", &mut cfg).expect("parse worker-threads");
+        assert_eq!(cfg.worker_threads, Some(12));
     }
 }

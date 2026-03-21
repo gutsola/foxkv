@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use bytes::Bytes;
+
 use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::time::current_time_ms;
@@ -271,7 +273,7 @@ fn persist_set(ctx: &AppContext, key: &[u8], set: BTreeSet<Vec<u8>>) {
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value: encode_set(&set),
+            value: Bytes::from(encode_set(&set)),
             expire_at_ms: None,
         },
     );

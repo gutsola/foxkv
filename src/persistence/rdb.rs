@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use bytes::Bytes;
 use crc64::crc64;
 
 use crate::command::shared::typed_value::{decode_value, TypedValue};
@@ -187,7 +188,7 @@ fn load_from_reader(db: &dyn StorageEngine, r: &mut impl Read) -> io::Result<usi
                 db.put_entry(
                     &key,
                     crate::storage::ValueEntry {
-                        value,
+                        value: Bytes::from(value),
                         expire_at_ms: Some(expire_at_ms),
                     },
                 );
@@ -206,7 +207,7 @@ fn load_from_reader(db: &dyn StorageEngine, r: &mut impl Read) -> io::Result<usi
                     db.put_entry(
                         &key,
                         crate::storage::ValueEntry {
-                            value,
+                            value: Bytes::from(value),
                             expire_at_ms: None,
                         },
                     );

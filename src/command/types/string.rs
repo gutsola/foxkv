@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::time::current_time_ms;
@@ -35,10 +37,12 @@ pub fn cmd_append(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
     let key = required_arg(args, 0)?;
     let suffix = required_arg(args, 1)?;
     let mut entry = ctx.db.get_entry(key).unwrap_or(ValueEntry {
-        value: Vec::new(),
+        value: Bytes::new(),
         expire_at_ms: None,
     });
-    entry.value.extend_from_slice(suffix);
+    let mut value = entry.value.to_vec();
+    value.extend_from_slice(suffix);
+    entry.value = Bytes::from(value);
     if let Some(aof_engine) = ctx.aof.as_ref() {
         aof_engine
             .append_append(key, suffix)
@@ -68,7 +72,7 @@ pub fn cmd_decrby(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
 pub fn cmd_get(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let value = ctx.db.get_entry(key).map(|entry| entry.value);
-    append_bulk_response(out, value.as_deref());
+    append_bulk_response(out, value.as_ref().map(|v| v.as_ref()));
     Ok(())
 }
 
@@ -87,7 +91,7 @@ pub fn cmd_getset(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value: value.to_vec(),
+            value: Bytes::copy_from_slice(value),
             expire_at_ms: None,
         },
     );
@@ -135,7 +139,7 @@ pub fn cmd_incrbyfloat(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> R
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value: next_bytes.clone(),
+            value: Bytes::from(next_bytes.clone()),
             expire_at_ms,
         },
     );
@@ -147,7 +151,7 @@ pub fn cmd_mget(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
     append_array_header(out, args.len());
     for key in args {
         let value = ctx.db.get_entry(key).map(|entry| entry.value);
-        append_bulk_response(out, value.as_deref());
+        append_bulk_response(out, value.as_ref().map(|v| v.as_ref()));
     }
     Ok(())
 }
@@ -168,7 +172,7 @@ pub fn cmd_mset(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
         ctx.db.put_entry(
             key,
             ValueEntry {
-                value: value.to_vec(),
+                value: Bytes::copy_from_slice(value),
                 expire_at_ms: None,
             },
         );
@@ -201,7 +205,7 @@ pub fn cmd_msetnx(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
             ctx.db.put_entry(
                 key,
                 ValueEntry {
-                    value: value.to_vec(),
+                    value: Bytes::copy_from_slice(value),
                     expire_at_ms: None,
                 },
             );
@@ -240,7 +244,7 @@ pub fn cmd_set(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<()
         ctx.db.put_entry(
             key,
             ValueEntry {
-                value: value.to_vec(),
+                value: Bytes::copy_from_slice(value),
                 expire_at_ms: None,
             },
         );
@@ -304,7 +308,7 @@ pub fn cmd_setnx(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<
     let applied = ctx.db.put_if_absent(
         key,
         ValueEntry {
-            value: value.to_vec(),
+            value: Bytes::copy_from_slice(value),
             expire_at_ms: None,
         },
     );
@@ -331,25 +335,27 @@ pub fn cmd_setrange(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resu
         return Ok(());
     }
     let mut current = entry.unwrap_or(ValueEntry {
-        value: Vec::new(),
+        value: Bytes::new(),
         expire_at_ms: None,
     });
+    let mut current_value = current.value.to_vec();
     let new_len = offset
         .checked_add(value.len())
         .ok_or_else(|| "ERR offset is out of range".to_string())?;
-    if current.value.len() < offset {
-        current.value.resize(offset, 0);
+    if current_value.len() < offset {
+        current_value.resize(offset, 0);
     }
-    if current.value.len() < new_len {
-        current.value.resize(new_len, 0);
+    if current_value.len() < new_len {
+        current_value.resize(new_len, 0);
     }
-    current.value[offset..offset + value.len()].copy_from_slice(value);
+    current_value[offset..offset + value.len()].copy_from_slice(value);
     if let Some(aof_engine) = ctx.aof.as_ref() {
         aof_engine
             .append_setrange(key, offset_raw, value)
             .map_err(|e| format!("ERR AOF append failed: {e}"))?;
     }
-    let len = current.value.len() as i64;
+    let len = current_value.len() as i64;
+    current.value = Bytes::from(current_value);
     ctx.db.put_entry(key, current);
     append_integer_response(out, len);
     Ok(())
@@ -372,7 +378,7 @@ pub fn cmd_substr(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
 
 fn build_entry(value: &[u8], ttl_ms: Option<u64>) -> ValueEntry {
     ValueEntry {
-        value: value.to_vec(),
+        value: Bytes::copy_from_slice(value),
         expire_at_ms: ttl_ms.map(|ttl| current_time_ms().saturating_add(ttl)),
     }
 }
@@ -418,7 +424,7 @@ fn execute_integer_delta_with_raw(
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value: next_bytes,
+            value: Bytes::from(next_bytes),
             expire_at_ms,
         },
     );
@@ -511,7 +517,7 @@ fn set_with_ttl(
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value: value.to_vec(),
+            value: Bytes::copy_from_slice(value),
             expire_at_ms: Some(current_time_ms().saturating_add(ttl_ms)),
         },
     );

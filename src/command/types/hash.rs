@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use bytes::Bytes;
+
 use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::typed_value::{
@@ -256,7 +258,7 @@ fn persist_hash(ctx: &AppContext, key: &[u8], map: BTreeMap<Vec<u8>, Vec<u8>>) {
     ctx.db.put_entry(
         key,
         ValueEntry {
-            value,
+            value: Bytes::from(value),
             expire_at_ms: None,
         },
     );

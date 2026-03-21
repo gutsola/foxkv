@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 #[derive(Debug, Clone, Copy)]
 pub struct DbConfig {
     pub worker_count: usize,
@@ -20,6 +22,6 @@ impl std::error::Error for DbError {}
 
 #[derive(Clone)]
 pub struct ValueEntry {
-    pub value: Vec<u8>,
+    pub value: Bytes,
     pub expire_at_ms: Option<u64>,
 }

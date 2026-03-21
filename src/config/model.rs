@@ -79,6 +79,8 @@ pub struct AppConfig {
     pub lua_time_limit: u32,
     /// hz，后台任务执行频率
     pub hz: u32,
+    /// Tokio runtime worker 线程数（None 时使用默认策略）
+    pub worker_threads: Option<usize>,
     /// 主从复制角色
     pub replication: ReplicationConfig,
 }

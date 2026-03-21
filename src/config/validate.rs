@@ -36,6 +36,11 @@ pub fn validate_config(config: &AppConfig) -> Result<(), ConfigError> {
             "appendfilename must not be empty".to_string(),
         ));
     }
+    if matches!(config.worker_threads, Some(0)) {
+        return Err(ConfigError::Validate(
+            "worker-threads must be greater than 0".to_string(),
+        ));
+    }
     if let ReplicationConfig::Replica { host, port } = &config.replication {
         if host.trim().is_empty() {
             return Err(ConfigError::Validate(

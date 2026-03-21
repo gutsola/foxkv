@@ -21,7 +21,9 @@ fn main() -> io::Result<()> {
     init_logger();
     let config = load_config_from_args()
         .map_err(|err| io::Error::other(format!("failed to load config: {err}")))?;
-    let write_threads = 16;
+    let worker_threads = config
+        .worker_threads
+        .unwrap_or_else(default_worker_threads);
     let addr = config.listen_addr();
     let pid = std::process::id();
 
@@ -31,6 +33,7 @@ fn main() -> io::Result<()> {
         VERSION, pid
     );
     eprintln!("# Configuration loaded");
+    eprintln!("# worker_threads: {}", worker_threads);
 
     let running_mode = match &config.replication {
         ReplicationConfig::Master => "standalone",
@@ -39,13 +42,13 @@ fn main() -> io::Result<()> {
     print_startup_logo(config.port, pid, running_mode);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(write_threads)
+        .worker_threads(worker_threads)
         .enable_all()
         .build()?;
 
     let raw_db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
         DashMapStorageEngine::new(DbConfig {
-            worker_count: write_threads,
+            worker_count: worker_threads,
         })
         .expect("failed to initialize storage"),
     );
@@ -116,6 +119,12 @@ fn main() -> io::Result<()> {
         }
     });
     Ok(())
+}
+
+fn default_worker_threads() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get().saturating_sub(1).max(1))
+        .unwrap_or(1)
 }
 
 fn init_logger() {
