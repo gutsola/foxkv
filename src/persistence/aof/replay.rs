@@ -174,7 +174,7 @@ mod tests {
         let path = temp_aof_path("flushall_command");
         cleanup(&path);
         let set_cmd = b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n";
-        let flushall_cmd = b"*1\r\n$9\r\nFLUSHALL\r\n";
+        let flushall_cmd = b"*1\r\n$8\r\nFLUSHALL\r\n";
         let mut content = Vec::new();
         content.extend_from_slice(set_cmd);
         content.extend_from_slice(flushall_cmd);

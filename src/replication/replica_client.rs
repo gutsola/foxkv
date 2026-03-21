@@ -205,3 +205,91 @@ async fn read_bulk_payload(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     }
     Ok(payload)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upstream_state_default_has_no_replid() {
+        let state = UpstreamState::default();
+        assert!(state.replid.is_none());
+        assert_eq!(state.offset, 0);
+    }
+
+    #[test]
+    fn upstream_state_can_be_cloned() {
+        let state = UpstreamState {
+            replid: Some("test-replid".to_string()),
+            offset: 100,
+        };
+        let cloned = state.clone();
+        assert_eq!(cloned.replid, Some("test-replid".to_string()));
+        assert_eq!(cloned.offset, 100);
+    }
+
+    fn encode_command_for_test(argv: &[&[u8]]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(64);
+        out.push(b'*');
+        out.extend_from_slice(argv.len().to_string().as_bytes());
+        out.extend_from_slice(b"\r\n");
+        for arg in argv {
+            out.push(b'$');
+            out.extend_from_slice(arg.len().to_string().as_bytes());
+            out.extend_from_slice(b"\r\n");
+            out.extend_from_slice(arg);
+            out.extend_from_slice(b"\r\n");
+        }
+        out
+    }
+
+    #[test]
+    fn encode_command_produces_valid_resp_for_single_arg() {
+        let result = encode_command_for_test(&[b"PING"]);
+        assert_eq!(result, b"*1\r\n$4\r\nPING\r\n");
+    }
+
+    #[test]
+    fn encode_command_produces_valid_resp_for_multiple_args() {
+        let result = encode_command_for_test(&[b"SET", b"key", b"value"]);
+        assert_eq!(result, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n");
+    }
+
+    #[test]
+    fn encode_command_handles_psync_command() {
+        let result = encode_command_for_test(&[b"PSYNC", b"?", b"-1"]);
+        assert_eq!(result, b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n");
+    }
+
+    #[test]
+    fn encode_command_handles_replconf_command() {
+        let result = encode_command_for_test(&[b"REPLCONF", b"listening-port", b"6379"]);
+        assert_eq!(result, b"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6379\r\n");
+    }
+
+    #[test]
+    fn encode_command_handles_ack_command() {
+        let result = encode_command_for_test(&[b"REPLCONF", b"ACK", b"12345"]);
+        assert_eq!(result, b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$5\r\n12345\r\n");
+    }
+
+    #[test]
+    fn encode_command_handles_empty_argv() {
+        let result = encode_command_for_test(&[]);
+        assert_eq!(result, b"*0\r\n");
+    }
+
+    #[test]
+    fn encode_command_handles_binary_data() {
+        let result = encode_command_for_test(&[b"SET", b"key", b"\x00\x01\x02"]);
+        assert_eq!(result, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\n\x00\x01\x02\r\n");
+    }
+
+    #[test]
+    fn encode_command_handles_long_values() {
+        let long_value = vec![b'x'; 1000];
+        let result = encode_command_for_test(&[b"SET", b"key", &long_value]);
+        assert!(result.starts_with(b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$1000\r\n"));
+        assert!(result.ends_with(b"\r\n"));
+    }
+}

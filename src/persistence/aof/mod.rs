@@ -466,7 +466,7 @@ mod tests {
         engine.append_flushall().unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
-        assert!(contents.starts_with(b"*1\r\n$9\r\nFLUSHALL\r\n"), "actual contents: {:?}", String::from_utf8_lossy(&contents));
+        assert!(contents.starts_with(b"*1\r\n$8\r\nFLUSHALL\r\n"), "actual contents: {:?}", String::from_utf8_lossy(&contents));
         cleanup(&path);
     }
 

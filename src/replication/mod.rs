@@ -319,3 +319,261 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
         .as_millis() as u64
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn replication_manager_new_creates_instance_with_defaults() {
+        let manager = ReplicationManager::new();
+        assert!(!manager.replid().is_empty());
+        assert_eq!(manager.replid().len(), 40);
+        assert_eq!(manager.current_offset(), 0);
+        assert!(!manager.should_capture_writes());
+    }
+
+    #[test]
+    fn replication_manager_with_backlog_bytes_sets_custom_size() {
+        let manager = ReplicationManager::with_backlog_bytes(1024 * 1024);
+        assert!(!manager.replid().is_empty());
+    }
+
+    #[test]
+    fn replication_manager_with_backlog_bytes_enforces_minimum_size() {
+        let manager = ReplicationManager::with_backlog_bytes(100);
+        let backlog = manager.backlog.lock().unwrap();
+        assert!(backlog.max_bytes >= 1024);
+    }
+
+    #[test]
+    fn enable_capture_writes_sets_flag_to_true() {
+        let manager = ReplicationManager::new();
+        assert!(!manager.should_capture_writes());
+        manager.enable_capture_writes();
+        assert!(manager.should_capture_writes());
+    }
+
+    #[test]
+    fn record_ack_updates_ack_state() {
+        let manager = ReplicationManager::new();
+        manager.record_ack(100);
+        let metrics = manager.replication_metrics();
+        assert_eq!(metrics.last_ack_offset, 100);
+        assert!(metrics.last_ack_age_ms.is_some());
+        assert_eq!(metrics.ack_count, 1);
+
+        manager.record_ack(200);
+        let metrics = manager.replication_metrics();
+        assert_eq!(metrics.last_ack_offset, 200);
+        assert_eq!(metrics.ack_count, 2);
+    }
+
+    #[test]
+    fn replication_metrics_returns_correct_values() {
+        let manager = ReplicationManager::new();
+        manager.enable_capture_writes();
+        manager.append_command(Bytes::from("test payload"));
+
+        let metrics = manager.replication_metrics();
+        assert!(!metrics.replid.is_empty());
+        assert_eq!(metrics.master_offset, 12);
+        assert!(metrics.capture_writes);
+    }
+
+    #[test]
+    fn append_command_increments_offset() {
+        let manager = ReplicationManager::new();
+        manager.enable_capture_writes();
+        assert_eq!(manager.current_offset(), 0);
+
+        manager.append_command(Bytes::from("command1"));
+        assert_eq!(manager.current_offset(), 8);
+
+        manager.append_command(Bytes::from("cmd2"));
+        assert_eq!(manager.current_offset(), 12);
+    }
+
+    #[test]
+    fn append_command_ignores_empty_payload() {
+        let manager = ReplicationManager::new();
+        manager.enable_capture_writes();
+        manager.append_command(Bytes::new());
+        assert_eq!(manager.current_offset(), 0);
+    }
+
+    #[test]
+    fn append_command_ignores_when_capture_disabled() {
+        let manager = ReplicationManager::new();
+        manager.append_command(Bytes::from("test"));
+        assert_eq!(manager.current_offset(), 0);
+    }
+
+    #[test]
+    fn negotiate_psync_returns_full_resync_for_unknown_replid() {
+        let manager = ReplicationManager::new();
+        let decision = manager.negotiate_psync("?", -1);
+        match decision {
+            PsyncDecision::FullResync { replid, .. } => {
+                assert_eq!(replid, manager.replid());
+            }
+            PsyncDecision::Continue { .. } => panic!("expected FullResync"),
+        }
+    }
+
+    #[test]
+    fn negotiate_psync_returns_full_resync_for_wrong_replid() {
+        let manager = ReplicationManager::new();
+        let decision = manager.negotiate_psync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0);
+        match decision {
+            PsyncDecision::FullResync { .. } => {}
+            PsyncDecision::Continue { .. } => panic!("expected FullResync"),
+        }
+    }
+
+    #[test]
+    fn negotiate_psync_returns_full_resync_for_negative_offset() {
+        let manager = ReplicationManager::new();
+        let replid = manager.replid().to_string();
+        let decision = manager.negotiate_psync(&replid, -1);
+        match decision {
+            PsyncDecision::FullResync { .. } => {}
+            PsyncDecision::Continue { .. } => panic!("expected FullResync"),
+        }
+    }
+
+    #[test]
+    fn negotiate_psync_enables_capture_writes() {
+        let manager = ReplicationManager::new();
+        assert!(!manager.should_capture_writes());
+        manager.negotiate_psync("?", -1);
+        assert!(manager.should_capture_writes());
+    }
+
+    #[test]
+    fn negotiate_psync_returns_continue_for_matching_offset() {
+        let manager = ReplicationManager::new();
+        manager.enable_capture_writes();
+        manager.append_command(Bytes::from("test command"));
+        let replid = manager.replid().to_string();
+        let offset = manager.current_offset() as i64;
+        let decision = manager.negotiate_psync(&replid, offset);
+        match decision {
+            PsyncDecision::Continue { start_offset } => {
+                assert_eq!(start_offset, offset as u64 + 1);
+            }
+            PsyncDecision::FullResync { .. } => panic!("expected Continue"),
+        }
+    }
+
+    #[test]
+    fn subscribe_from_enables_capture_writes() {
+        let manager = ReplicationManager::new();
+        assert!(!manager.should_capture_writes());
+        let _sub = manager.subscribe_from(0);
+        assert!(manager.should_capture_writes());
+    }
+
+    #[test]
+    fn subscribe_from_returns_history() {
+        let manager = ReplicationManager::new();
+        manager.enable_capture_writes();
+        manager.append_command(Bytes::from("cmd1"));
+        manager.append_command(Bytes::from("cmd2"));
+        let sub = manager.subscribe_from(0);
+        assert_eq!(sub.history.len(), 2);
+    }
+
+    #[test]
+    fn try_enqueue_write_argv_ignores_when_capture_disabled() {
+        let manager = ReplicationManager::new();
+        manager.try_enqueue_write_argv(&[b"SET", b"key", b"value"]);
+        assert_eq!(manager.dropped_ingress_writes(), 0);
+    }
+
+    #[test]
+    fn generate_replid_produces_40_char_hex_string() {
+        let replid = generate_replid();
+        assert_eq!(replid.len(), 40);
+        assert!(replid.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn generate_replid_produces_unique_values() {
+        let replid1 = generate_replid();
+        thread::sleep(Duration::from_micros(1));
+        let replid2 = generate_replid();
+        assert_ne!(replid1, replid2);
+    }
+
+    #[test]
+    fn encode_queued_write_produces_valid_resp() {
+        let argv: Vec<Bytes> = vec![
+            Bytes::from("SET"),
+            Bytes::from("key"),
+            Bytes::from("value"),
+        ];
+        let result = encode_queued_write(&argv);
+        assert_eq!(&result[..], b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n");
+    }
+
+    #[test]
+    fn encode_queued_write_handles_empty_argv() {
+        let argv: Vec<Bytes> = vec![];
+        let result = encode_queued_write(&argv);
+        assert_eq!(&result[..], b"*0\r\n");
+    }
+
+    #[test]
+    fn backlog_evicts_old_entries_when_full() {
+        let manager = ReplicationManager::with_backlog_bytes(100);
+        manager.enable_capture_writes();
+        for i in 0..20 {
+            let cmd = format!("command{}", i);
+            manager.append_command(Bytes::from(cmd));
+        }
+        let backlog = manager.backlog.lock().unwrap();
+        assert!(backlog.total_bytes <= backlog.max_bytes);
+    }
+
+    #[test]
+    fn replication_event_contains_correct_offsets() {
+        let manager = Arc::new(ReplicationManager::new());
+        manager.enable_capture_writes();
+        let mut receiver = manager.tx.subscribe();
+        manager.append_command(Bytes::from("test"));
+        let event = receiver.try_recv().unwrap();
+        assert_eq!(event.start_offset, 1);
+        assert_eq!(event.end_offset, 4);
+        assert_eq!(event.payload.as_ref(), b"test");
+    }
+
+    #[test]
+    fn replication_manager_can_be_cloned_via_arc() {
+        let manager = Arc::new(ReplicationManager::new());
+        let manager2 = Arc::clone(&manager);
+        manager2.enable_capture_writes();
+        assert!(manager.should_capture_writes());
+    }
+
+    #[test]
+    fn current_offset_is_thread_safe() {
+        let manager = Arc::new(ReplicationManager::new());
+        manager.enable_capture_writes();
+        let mut handles = vec![];
+        for _ in 0..10 {
+            let m = Arc::clone(&manager);
+            handles.push(thread::spawn(move || {
+                m.append_command(Bytes::from("x"));
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(manager.current_offset(), 10);
+    }
+}
