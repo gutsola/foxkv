@@ -388,7 +388,7 @@ fn match_glob_impl(key: &[u8], ki: usize, pattern: &[u8], pi: usize) -> bool {
                     i += 1;
                 }
             }
-            if matched != neg {
+            if matched == neg {
                 return false;
             }
             match_glob_impl(key, ki + 1, pattern, end + 1)
@@ -399,5 +399,194 @@ fn match_glob_impl(key: &[u8], ki: usize, pattern: &[u8], pi: usize) -> bool {
             }
             match_glob_impl(key, ki + 1, pattern, pi + 1)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    use bytes::Bytes;
+
+    use crate::app_context::AppContext;
+    use crate::command::shared::typed_value::encode_hash;
+    use crate::config::default_config;
+    use crate::replication::ReplicationManager;
+    use crate::storage::{DashMapStorageEngine, DbConfig, StorageEngine, ValueEntry};
+
+    use super::{
+        cmd_exists, cmd_scan, cmd_ttl, cmd_type, cmd_dump, cmd_persist, cmd_del,
+        match_glob, parse_scan_cursor, parse_timestamp_ms, parse_timestamp_seconds, parse_ttl_ms,
+        parse_ttl_seconds, value_type_name, MAGIC, TYPE_HASH, TYPE_LIST, TYPE_SET, TYPE_ZSET,
+    };
+
+    fn test_ctx() -> AppContext {
+        let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
+            DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init should work"),
+        );
+        AppContext::new(
+            default_config(),
+            db,
+            None,
+            None,
+            None,
+            Arc::new(ReplicationManager::new()),
+        )
+    }
+
+    #[test]
+    fn value_type_name_detects_encoded_types_and_falls_back_to_string() {
+        let mut buf = Vec::from(MAGIC.as_slice());
+        buf.push(TYPE_HASH);
+        assert_eq!(value_type_name(&buf), "hash");
+
+        buf[4] = TYPE_LIST;
+        assert_eq!(value_type_name(&buf), "list");
+
+        buf[4] = TYPE_SET;
+        assert_eq!(value_type_name(&buf), "set");
+
+        buf[4] = TYPE_ZSET;
+        assert_eq!(value_type_name(&buf), "zset");
+
+        assert_eq!(value_type_name(b"plain"), "string");
+        assert_eq!(value_type_name(b"FKV1\xff"), "string");
+    }
+
+    #[test]
+    fn parse_ttl_and_timestamp_helpers_handle_boundaries() {
+        assert_eq!(parse_timestamp_seconds(b"123").expect("valid"), 123);
+        assert_eq!(parse_timestamp_seconds(b"-5").expect("clamped"), 0);
+        assert_eq!(
+            parse_timestamp_seconds(b"abc").expect_err("invalid"),
+            "ERR value is not an integer or out of range"
+        );
+
+        assert_eq!(parse_ttl_seconds(b"1").expect("valid"), 1);
+        assert_eq!(
+            parse_ttl_seconds(b"0").expect_err("zero invalid"),
+            "ERR invalid expire time"
+        );
+
+        assert_eq!(parse_timestamp_ms(b"99").expect("valid"), 99);
+        assert_eq!(
+            parse_timestamp_ms(b"-1").expect_err("negative invalid"),
+            "ERR value is not an integer or out of range"
+        );
+        assert_eq!(
+            parse_ttl_ms(b"0").expect_err("zero invalid"),
+            "ERR invalid expire time"
+        );
+    }
+
+    #[test]
+    fn parse_scan_cursor_rejects_invalid_values() {
+        assert_eq!(parse_scan_cursor(b"0").expect("valid"), 0);
+        assert_eq!(
+            parse_scan_cursor(b"-1").expect_err("invalid"),
+            "ERR invalid cursor"
+        );
+        assert_eq!(
+            parse_scan_cursor(b"not-a-number").expect_err("invalid"),
+            "ERR invalid cursor"
+        );
+    }
+
+    #[test]
+    fn match_glob_supports_wildcards_classes_and_escaping() {
+        assert!(match_glob(b"abc", b"a*"));
+        assert!(match_glob(b"abc", b"a?c"));
+        assert!(match_glob(b"a*c", b"a\\*c"));
+        assert!(match_glob(b"b", b"[a-c]"));
+        assert!(match_glob(b"z", b"[^a-c]"));
+
+        assert!(!match_glob(b"abc", b"a\\?c"));
+        assert!(!match_glob(b"d", b"[a-c]"));
+        assert!(!match_glob(b"a", b"["));
+    }
+
+    #[test]
+    fn exists_dump_and_del_follow_key_lifecycle() {
+        let ctx = test_ctx();
+        ctx.db.put_entry(
+            b"k1",
+            ValueEntry {
+                value: Bytes::from_static(b"v1"),
+                expire_at_ms: None,
+            },
+        );
+
+        let mut out = Vec::new();
+        cmd_exists(&[b"k1", b"missing"], &ctx, &mut out).expect("exists");
+        assert_eq!(out, b":1\r\n");
+
+        out.clear();
+        cmd_dump(&[b"k1"], &ctx, &mut out).expect("dump");
+        assert_eq!(out, b"$2\r\nv1\r\n");
+
+        out.clear();
+        cmd_del(&[b"k1", b"missing"], &ctx, &mut out).expect("del");
+        assert_eq!(out, b":1\r\n");
+    }
+
+    #[test]
+    fn ttl_and_persist_return_expected_flags() {
+        let ctx = test_ctx();
+        let now = crate::command::shared::time::current_time_ms();
+        ctx.db.put_entry(
+            b"k1",
+            ValueEntry {
+                value: Bytes::from_static(b"v1"),
+                expire_at_ms: Some(now + 5_000),
+            },
+        );
+
+        let mut out = Vec::new();
+        cmd_ttl(&[b"k1"], &ctx, &mut out).expect("ttl");
+        let ttl_resp = String::from_utf8(out).expect("utf8");
+        assert!(ttl_resp.starts_with(':'));
+        assert!(ttl_resp != ":-1\r\n" && ttl_resp != ":-2\r\n");
+
+        let mut out2 = Vec::new();
+        cmd_persist(&[b"k1"], &ctx, &mut out2).expect("persist");
+        assert_eq!(out2, b":1\r\n");
+    }
+
+    #[test]
+    fn type_and_scan_return_expected_payloads() {
+        let ctx = test_ctx();
+        let mut map = BTreeMap::new();
+        map.insert(b"f".to_vec(), b"v".to_vec());
+        let hash = encode_hash(&map);
+
+        ctx.db.put_entry(
+            b"str:1",
+            ValueEntry {
+                value: Bytes::from_static(b"abc"),
+                expire_at_ms: None,
+            },
+        );
+        ctx.db.put_entry(
+            b"hash:1",
+            ValueEntry {
+                value: Bytes::from(hash),
+                expire_at_ms: None,
+            },
+        );
+
+        let mut out = Vec::new();
+        cmd_type(&[b"str:1"], &ctx, &mut out).expect("type string");
+        assert_eq!(out, b"+string\r\n");
+
+        out.clear();
+        cmd_type(&[b"hash:1"], &ctx, &mut out).expect("type hash");
+        assert_eq!(out, b"+hash\r\n");
+
+        out.clear();
+        cmd_scan(&[b"0", b"MATCH", b"hash:*", b"COUNT", b"10"], &ctx, &mut out).expect("scan");
+        let s = String::from_utf8(out).expect("utf8");
+        assert!(s.contains("hash:1"));
+        assert!(!s.contains("str:1"));
     }
 }

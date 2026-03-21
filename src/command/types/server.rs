@@ -305,3 +305,87 @@ pub fn cmd_time(_args: &[&[u8]], _ctx: &AppContext, out: &mut Vec<u8>) -> Result
     append_bulk_response(out, Some(micros.to_string().as_bytes()));
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use bytes::Bytes;
+
+    use crate::app_context::AppContext;
+    use crate::config::default_config;
+    use crate::replication::ReplicationManager;
+    use crate::storage::{DashMapStorageEngine, DbConfig, StorageEngine, ValueEntry};
+
+    use super::{
+        cmd_dbsize, cmd_info, cmd_memory, format_client_output_buffer_limit, format_size_for_config,
+    };
+
+    fn test_ctx() -> AppContext {
+        let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
+            DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init should work"),
+        );
+        AppContext::new(
+            default_config(),
+            db,
+            None,
+            None,
+            None,
+            Arc::new(ReplicationManager::new()),
+        )
+    }
+
+    #[test]
+    fn format_size_for_config_uses_expected_units() {
+        assert_eq!(format_size_for_config(0), "0");
+        assert_eq!(format_size_for_config(1023), "1023");
+        assert_eq!(format_size_for_config(1024), "1kb");
+        assert_eq!(format_size_for_config(5 * 1024 * 1024), "5mb");
+        assert_eq!(format_size_for_config(3 * 1024 * 1024 * 1024), "3gb");
+    }
+
+    #[test]
+    fn format_client_output_buffer_limit_combines_three_fields() {
+        let got = format_client_output_buffer_limit(2 * 1024, 4 * 1024 * 1024, 60);
+        assert_eq!(got, "2kb 4mb 60");
+    }
+
+    #[test]
+    fn dbsize_and_memory_usage_reflect_current_dataset() {
+        let ctx = test_ctx();
+        ctx.db.put_entry(
+            b"k1",
+            ValueEntry {
+                value: Bytes::from_static(b"v1"),
+                expire_at_ms: None,
+            },
+        );
+
+        let mut out = Vec::new();
+        cmd_dbsize(&[], &ctx, &mut out).expect("dbsize should succeed");
+        assert_eq!(out, b":1\r\n");
+
+        out.clear();
+        cmd_memory(&[b"USAGE", b"k1"], &ctx, &mut out).expect("memory usage should succeed");
+        assert_eq!(out, b":68\r\n");
+    }
+
+    #[test]
+    fn info_server_and_all_sections_render_expected_blocks() {
+        let ctx = test_ctx();
+        let mut out = Vec::new();
+        cmd_info(&[], &ctx, &mut out).expect("info should succeed");
+        let server_only = String::from_utf8(out).expect("resp should be utf8");
+        assert!(server_only.contains("# Server\r\n"));
+        assert!(!server_only.contains("# Clients\r\n"));
+
+        let mut out_all = Vec::new();
+        cmd_info(&[b"all"], &ctx, &mut out_all).expect("info all should succeed");
+        let all = String::from_utf8(out_all).expect("resp should be utf8");
+        assert!(all.contains("# Server\r\n"));
+        assert!(all.contains("# Clients\r\n"));
+        assert!(all.contains("# Memory\r\n"));
+        assert!(all.contains("# Keyspace\r\n"));
+        assert!(all.contains("# Replication\r\n"));
+    }
+}

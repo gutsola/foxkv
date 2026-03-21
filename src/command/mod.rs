@@ -210,25 +210,29 @@ fn parse_usize_line(input: &[u8], mut cursor: usize) -> Option<(usize, usize)> {
 mod tests {
     use std::sync::Arc;
 
-    use super::{execute_argv_command, parse_argv_frame};
+    use super::{execute_argv_command, execute_replication_argv_command, parse_argv_frame, ExecTransition};
     use crate::app_context::AppContext;
     use crate::config::default_config;
     use crate::replication::ReplicationManager;
     use crate::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 
-    #[test]
-    fn string_set_then_get_dispatch_works() {
+    fn test_ctx() -> AppContext {
         let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
             DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"),
         );
-        let ctx = AppContext::new(
+        AppContext::new(
             default_config(),
             db,
             None,
             None,
             None,
             Arc::new(ReplicationManager::new()),
-        );
+        )
+    }
+
+    #[test]
+    fn string_set_then_get_dispatch_works() {
+        let ctx = test_ctx();
         let set = b"*3\r\n$3\r\nSET\r\n$2\r\nk1\r\n$2\r\nv1\r\n";
         let get = b"*2\r\n$3\r\nGET\r\n$2\r\nk1\r\n";
 
@@ -247,17 +251,7 @@ mod tests {
 
     #[test]
     fn zadd_dispatch_works() {
-        let db: Arc<dyn StorageEngine + Send + Sync> = Arc::new(
-            DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"),
-        );
-        let ctx = AppContext::new(
-            default_config(),
-            db,
-            None,
-            None,
-            None,
-            Arc::new(ReplicationManager::new()),
-        );
+        let ctx = test_ctx();
         // ZADD key 1 a 2 b (6 args: ZADD, key, score1, member1, score2, member2)
         let zadd = b"*6\r\n$4\r\nZADD\r\n$3\r\nkey\r\n$1\r\n1\r\n$1\r\na\r\n$1\r\n2\r\n$1\r\nb\r\n";
 
@@ -266,5 +260,62 @@ mod tests {
         let mut out = Vec::new();
         execute_argv_command(&argv, &ctx, &mut out).expect("dispatch zadd failed");
         assert_eq!(out, b":2\r\n");
+    }
+
+    #[test]
+    fn execute_argv_command_returns_error_for_empty_and_unknown_command() {
+        let ctx = test_ctx();
+        let mut out = Vec::new();
+
+        let err = execute_argv_command(&[], &ctx, &mut out).expect_err("empty command should fail");
+        assert_eq!(err, "ERR Protocol error: empty command");
+
+        let err = execute_argv_command(&[b"NO_SUCH_CMD"], &ctx, &mut out)
+            .expect_err("unknown command should fail");
+        assert_eq!(err, "ERR unknown command 'NO_SUCH_CMD'");
+    }
+
+    #[test]
+    fn parse_argv_frame_returns_none_for_non_resp_or_incomplete_frames() {
+        assert!(parse_argv_frame(b"PING\r\n").is_none());
+        assert!(parse_argv_frame(b"*2\r\n$4\r\nPING\r\n$5\r\nhe").is_none());
+    }
+
+    #[test]
+    fn sync_and_psync_dispatch_enter_replica_stream() {
+        let ctx = test_ctx();
+
+        let mut out = Vec::new();
+        let full = execute_argv_command(&[b"SYNC"], &ctx, &mut out).expect("sync should dispatch");
+        assert!(out.starts_with(b"+FULLRESYNC "));
+        assert!(matches!(
+            full.transition,
+            ExecTransition::EnterReplicaStream {
+                send_empty_rdb: true,
+                ..
+            }
+        ));
+
+        let replid = ctx.replication.replid().as_bytes().to_vec();
+        out.clear();
+        let cont = execute_argv_command(&[b"PSYNC", &replid, b"0"], &ctx, &mut out)
+            .expect("psync continue should dispatch");
+        assert_eq!(out, b"+CONTINUE\r\n");
+        assert!(matches!(
+            cont.transition,
+            ExecTransition::EnterReplicaStream {
+                start_offset: 1,
+                send_empty_rdb: false
+            }
+        ));
+    }
+
+    #[test]
+    fn execute_replication_argv_command_reuses_dispatch_paths() {
+        let ctx = test_ctx();
+        let mut out = Vec::new();
+        execute_replication_argv_command(&[b"PING"], &ctx, &mut out)
+            .expect("replication path should dispatch ping");
+        assert_eq!(out, b"+PONG\r\n");
     }
 }

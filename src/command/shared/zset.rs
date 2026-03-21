@@ -468,4 +468,134 @@ mod tests {
         assert_eq!(collected[0].0, b"a");
         assert_eq!(collected[0].1, 1.0);
     }
+
+    #[test]
+    fn add_updates_existing_member_score() {
+        let mut z = ZSet::new();
+        assert!(z.add(b"a".to_vec(), 1.0).expect("add should succeed"));
+        assert!(z.add(b"a".to_vec(), 2.0).expect("update should succeed"));
+        assert_eq!(z.len(), 1);
+        assert_eq!(z.score(b"a"), Some(2.0));
+    }
+
+    #[test]
+    fn add_returns_error_when_score_is_not_finite() {
+        let mut z = ZSet::new();
+        let err = z.add(b"a".to_vec(), f64::INFINITY).expect_err("should fail");
+        assert_eq!(err, "ERR value is not a valid float");
+    }
+
+    #[test]
+    fn rank_and_rev_rank_follow_sorted_order() {
+        let mut z = ZSet::new();
+        z.add(b"b".to_vec(), 2.0).unwrap();
+        z.add(b"a".to_vec(), 1.0).unwrap();
+        z.add(b"c".to_vec(), 3.0).unwrap();
+        assert_eq!(z.rank(b"a"), Some(0));
+        assert_eq!(z.rank(b"b"), Some(1));
+        assert_eq!(z.rev_rank(b"a"), Some(2));
+        assert_eq!(z.rev_rank(b"c"), Some(0));
+    }
+
+    #[test]
+    fn range_by_rank_supports_negative_indices() {
+        let mut z = ZSet::new();
+        z.add(b"a".to_vec(), 1.0).unwrap();
+        z.add(b"b".to_vec(), 2.0).unwrap();
+        z.add(b"c".to_vec(), 3.0).unwrap();
+        z.add(b"d".to_vec(), 4.0).unwrap();
+
+        let range = z.range_by_rank(-2, -1);
+        assert_eq!(range, vec![(b"c".to_vec(), 3.0), (b"d".to_vec(), 4.0)]);
+    }
+
+    #[test]
+    fn range_by_score_respects_inclusive_and_exclusive_bounds() {
+        let mut z = ZSet::new();
+        z.add(b"a".to_vec(), 1.0).unwrap();
+        z.add(b"b".to_vec(), 2.0).unwrap();
+        z.add(b"c".to_vec(), 3.0).unwrap();
+
+        let inclusive = z.range_by_score(1.0, false, 2.0, false);
+        assert_eq!(inclusive, vec![(b"a".to_vec(), 1.0), (b"b".to_vec(), 2.0)]);
+
+        let exclusive = z.range_by_score(1.0, true, 3.0, true);
+        assert_eq!(exclusive, vec![(b"b".to_vec(), 2.0)]);
+    }
+
+    #[test]
+    fn range_by_lex_and_reverse_return_expected_members() {
+        let mut z = ZSet::new();
+        z.add(b"aa".to_vec(), 1.0).unwrap();
+        z.add(b"ab".to_vec(), 1.0).unwrap();
+        z.add(b"ac".to_vec(), 1.0).unwrap();
+        z.add(b"ba".to_vec(), 1.0).unwrap();
+
+        let forward = z.range_by_lex(b"ab", true, b"ba", false);
+        assert_eq!(forward, vec![b"ab".to_vec(), b"ac".to_vec()]);
+
+        let reverse = z.range_by_lex_rev(b"ab", true, b"ba", false);
+        assert_eq!(reverse, vec![b"ac".to_vec(), b"ab".to_vec()]);
+    }
+
+    #[test]
+    fn remove_and_pop_operations_update_len_and_membership() {
+        let mut z = ZSet::new();
+        z.add(b"a".to_vec(), 1.0).unwrap();
+        z.add(b"b".to_vec(), 2.0).unwrap();
+        z.add(b"c".to_vec(), 3.0).unwrap();
+
+        assert!(z.remove(b"b"));
+        assert!(!z.remove(b"missing"));
+        assert_eq!(z.len(), 2);
+
+        let min = z.pop_min().expect("min should exist");
+        assert_eq!(min, (b"a".to_vec(), 1.0));
+        let max = z.pop_max().expect("max should exist");
+        assert_eq!(max, (b"c".to_vec(), 3.0));
+        assert!(z.is_empty());
+    }
+
+    #[test]
+    fn remove_range_variants_remove_expected_count() {
+        let mut z = ZSet::new();
+        for (m, s) in [
+            (b"a".to_vec(), 1.0),
+            (b"b".to_vec(), 2.0),
+            (b"c".to_vec(), 3.0),
+            (b"d".to_vec(), 4.0),
+        ] {
+            z.add(m, s).unwrap();
+        }
+
+        assert_eq!(z.remove_by_rank(0, 0), 1);
+        assert_eq!(z.remove_by_score(3.0, false, 4.0, false), 2);
+        assert_eq!(z.remove_by_lex(b"b", true, b"b", true), 1);
+        assert!(z.is_empty());
+    }
+
+    #[test]
+    fn incr_by_returns_new_score_and_validates_finite_result() {
+        let mut z = ZSet::new();
+        let s1 = z.incr_by(b"a", 1.5).expect("incr should succeed");
+        assert_eq!(s1, 1.5);
+        let s2 = z.incr_by(b"a", 2.0).expect("incr should succeed");
+        assert_eq!(s2, 3.5);
+        assert_eq!(z.score(b"a"), Some(3.5));
+
+        z.add(b"b".to_vec(), f64::MAX).unwrap();
+        let err = z.incr_by(b"b", f64::MAX).expect_err("overflow should fail");
+        assert_eq!(err, "ERR value is not a valid float");
+    }
+
+    #[test]
+    fn tie_breaks_by_member_when_scores_are_equal() {
+        let mut z = ZSet::new();
+        z.add(b"b".to_vec(), 1.0).unwrap();
+        z.add(b"a".to_vec(), 1.0).unwrap();
+        z.add(b"c".to_vec(), 1.0).unwrap();
+
+        let members: Vec<Vec<u8>> = z.iter().map(|(m, _)| m).collect();
+        assert_eq!(members, vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()]);
+    }
 }

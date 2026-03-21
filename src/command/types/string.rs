@@ -586,3 +586,89 @@ fn append_slice_range(ctx: &AppContext, out: &mut Vec<u8>, key: &[u8], start: i6
     let slice = slice_by_redis_range(&value, start, end);
     append_bulk_response(out, Some(slice));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        normalize_index, parse_f64_argument, parse_i64_argument, parse_offset, parse_set_options,
+        parse_ttl_ms, slice_by_redis_range, SetCondition,
+    };
+
+    #[test]
+    fn parse_number_helpers_validate_input_and_ranges() {
+        assert_eq!(parse_i64_argument(b"-12").expect("valid"), -12);
+        assert_eq!(
+            parse_i64_argument(b"abc").expect_err("invalid"),
+            "ERR value is not an integer or out of range"
+        );
+
+        assert_eq!(parse_f64_argument(b"1.25").expect("valid"), 1.25);
+        assert_eq!(
+            parse_f64_argument(b"NaN").expect_err("nan invalid"),
+            "ERR value is not a valid float"
+        );
+
+        assert_eq!(parse_offset(b"5").expect("valid"), 5);
+        assert_eq!(
+            parse_offset(b"-1").expect_err("negative invalid"),
+            "ERR offset is out of range"
+        );
+    }
+
+    #[test]
+    fn slice_by_redis_range_handles_negative_and_out_of_bounds_indices() {
+        let v = b"abcdef";
+        assert_eq!(slice_by_redis_range(v, 0, 2), b"abc");
+        assert_eq!(slice_by_redis_range(v, -3, -1), b"def");
+        assert_eq!(slice_by_redis_range(v, 10, 20), b"");
+        assert_eq!(slice_by_redis_range(v, 3, 1), b"");
+    }
+
+    #[test]
+    fn normalize_index_converts_negative_index_relative_to_length() {
+        assert_eq!(normalize_index(-1, 6), 5);
+        assert_eq!(normalize_index(-6, 6), 0);
+        assert_eq!(normalize_index(2, 6), 2);
+    }
+
+    #[test]
+    fn parse_set_options_supports_nx_xx_and_ttl_modifiers() {
+        let (ttl, cond) = parse_set_options(&[b"nx"]).expect("valid");
+        assert_eq!(ttl, None);
+        assert!(matches!(cond, SetCondition::Nx));
+
+        let (ttl2, cond2) = parse_set_options(&[b"EX", b"2", b"XX"]).expect("valid");
+        assert_eq!(ttl2, Some(2000));
+        assert!(matches!(cond2, SetCondition::Xx));
+    }
+
+    #[test]
+    fn parse_set_options_rejects_conflicting_or_invalid_tokens() {
+        match parse_set_options(&[b"NX", b"XX"]) {
+            Ok(_) => panic!("expected syntax error"),
+            Err(err) => assert_eq!(err, "ERR syntax error"),
+        }
+        match parse_set_options(&[b"PX"]) {
+            Ok(_) => panic!("expected syntax error"),
+            Err(err) => assert_eq!(err, "ERR syntax error"),
+        }
+        match parse_set_options(&[b"EX", b"0"]) {
+            Ok(_) => panic!("expected invalid ttl"),
+            Err(err) => assert_eq!(err, "ERR invalid expire time in 'set' command"),
+        }
+    }
+
+    #[test]
+    fn parse_ttl_ms_validates_kind_and_zero_value() {
+        assert_eq!(parse_ttl_ms(b"px", b"150").expect("px"), 150);
+        assert_eq!(parse_ttl_ms(b"ex", b"2").expect("ex"), 2000);
+        assert_eq!(
+            parse_ttl_ms(b"ex", b"0").expect_err("invalid"),
+            "ERR invalid expire time in 'set' command"
+        );
+        assert_eq!(
+            parse_ttl_ms(b"unknown", b"1").expect_err("invalid"),
+            "ERR syntax error"
+        );
+    }
+}

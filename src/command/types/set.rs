@@ -411,3 +411,70 @@ fn xorshift64(mut state: u64) -> u64 {
     state ^= state << 17;
     state
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::{
+        parse_i64, parse_usize, pick_distinct_members, pick_one_random_member, pick_repeated_members,
+        set_to_members, take_one_random_member, xorshift64,
+    };
+
+    #[test]
+    fn parse_helpers_validate_integer_and_cursor_inputs() {
+        assert_eq!(parse_i64(b"-2").expect("valid"), -2);
+        assert_eq!(
+            parse_i64(b"abc").expect_err("invalid"),
+            "ERR value is not an integer or out of range"
+        );
+
+        assert_eq!(parse_usize(b"12").expect("valid"), 12);
+        assert_eq!(
+            parse_usize(b"-1").expect_err("invalid"),
+            "ERR invalid cursor"
+        );
+    }
+
+    #[test]
+    fn set_to_members_returns_sorted_members_from_btreeset() {
+        let mut set = BTreeSet::new();
+        set.insert(b"b".to_vec());
+        set.insert(b"a".to_vec());
+        let members = set_to_members(set);
+        assert_eq!(members, vec![b"a".to_vec(), b"b".to_vec()]);
+    }
+
+    #[test]
+    fn random_member_helpers_return_only_existing_members() {
+        let values = vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()];
+        let picked = pick_one_random_member(&values).expect("non-empty");
+        assert!(values.contains(&picked));
+
+        let distinct = pick_distinct_members(&values, 2);
+        assert_eq!(distinct.len(), 2);
+        assert!(distinct.iter().all(|m| values.contains(m)));
+
+        let repeated = pick_repeated_members(&values, 5);
+        assert_eq!(repeated.len(), 5);
+        assert!(repeated.iter().all(|m| values.contains(m)));
+    }
+
+    #[test]
+    fn take_one_random_member_removes_selected_value() {
+        let mut set = BTreeSet::new();
+        set.insert(b"a".to_vec());
+        set.insert(b"b".to_vec());
+        let before = set.len();
+
+        let removed = take_one_random_member(&mut set).expect("should remove one");
+        assert_eq!(set.len(), before - 1);
+        assert!(!set.contains(&removed));
+    }
+
+    #[test]
+    fn xorshift64_uses_fallback_for_zero_seed() {
+        let out = xorshift64(0);
+        assert_ne!(out, 0);
+    }
+}
