@@ -6,6 +6,7 @@
 //! - save rules: auto-trigger BGSAVE when conditions met (e.g. 900s + 1 change)
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Cursor;
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read, Write};
 use std::path::PathBuf;
@@ -140,7 +141,16 @@ pub fn load(db: &dyn StorageEngine, path: &PathBuf) -> io::Result<usize> {
 
     let file = File::open(path)?;
     let mut r = BufReader::new(file);
+    load_from_reader(db, &mut r)
+}
 
+/// Load database from in-memory RDB bytes. Returns number of keys loaded.
+pub fn load_from_bytes(db: &dyn StorageEngine, bytes: &[u8]) -> io::Result<usize> {
+    let mut cursor = Cursor::new(bytes);
+    load_from_reader(db, &mut cursor)
+}
+
+fn load_from_reader(db: &dyn StorageEngine, r: &mut impl Read) -> io::Result<usize> {
     let mut magic = [0u8; 5];
     r.read_exact(&mut magic)?;
     if &magic != RDB_MAGIC {
@@ -154,26 +164,26 @@ pub fn load(db: &dyn StorageEngine, path: &PathBuf) -> io::Result<usize> {
     let mut keys_loaded = 0_usize;
 
     loop {
-        let opcode = read_byte(&mut r)?;
+        let opcode = read_byte(r)?;
         match opcode {
             RDB_OPCODE_AUX => {
-                let _key = read_rdb_string(&mut r)?;
-                let _value = read_rdb_string(&mut r)?;
+                let _key = read_rdb_string(r)?;
+                let _value = read_rdb_string(r)?;
             }
             RDB_OPCODE_SELECTDB => {
-                let _db_number = read_length(&mut r)?;
+                let _db_number = read_length(r)?;
             }
             RDB_OPCODE_RESIZEDB => {
-                let _hash_size = read_length(&mut r)?;
-                let _expire_size = read_length(&mut r)?;
+                let _hash_size = read_length(r)?;
+                let _expire_size = read_length(r)?;
             }
             RDB_OPCODE_EXPIRETIME_MS => {
                 let mut ts_bytes = [0u8; 8];
                 r.read_exact(&mut ts_bytes)?;
                 let expire_at_ms = u64::from_le_bytes(ts_bytes);
-                let value_type = read_byte(&mut r)?;
-                let key = read_rdb_string(&mut r)?;
-                let value = read_rdb_value(&mut r, value_type)?;
+                let value_type = read_byte(r)?;
+                let key = read_rdb_string(r)?;
+                let value = read_rdb_value(r, value_type)?;
                 db.put_entry(
                     &key,
                     crate::storage::ValueEntry {
@@ -191,8 +201,8 @@ pub fn load(db: &dyn StorageEngine, path: &PathBuf) -> io::Result<usize> {
                     || opcode == RDB_TYPE_ZSET
                     || opcode == RDB_TYPE_HASH
                 {
-                    let key = read_rdb_string(&mut r)?;
-                    let value = read_rdb_value(&mut r, opcode)?;
+                    let key = read_rdb_string(r)?;
+                    let value = read_rdb_value(r, opcode)?;
                     db.put_entry(
                         &key,
                         crate::storage::ValueEntry {

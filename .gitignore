@@ -1,4 +1,5 @@
 /target
 .idea
+.cursor
 *.aof
 *.rdb

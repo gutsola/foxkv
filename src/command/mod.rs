@@ -70,6 +70,23 @@ pub fn execute_argv_command(
     ctx: &AppContext,
     out: &mut Vec<u8>,
 ) -> Result<ExecOutcome, String> {
+    execute_argv_command_inner(argv, ctx, out, true)
+}
+
+pub fn execute_replication_argv_command(
+    argv: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+) -> Result<ExecOutcome, String> {
+    execute_argv_command_inner(argv, ctx, out, false)
+}
+
+fn execute_argv_command_inner(
+    argv: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+    replicate_writes: bool,
+) -> Result<ExecOutcome, String> {
     let Some((cmd, args)) = argv.split_first() else {
         return Err("ERR Protocol error: empty command".to_string());
     };
@@ -85,7 +102,10 @@ pub fn execute_argv_command(
         ($module:ident, $name:ident, $handler:ident) => {
             if cmd.eq_ignore_ascii_case(stringify!($name).as_bytes()) {
                 types::$module::$handler(args, ctx, out)?;
-                if is_replicable_write_command(cmd) && ctx.replication.should_capture_writes() {
+                if replicate_writes
+                    && is_replicable_write_command(cmd)
+                    && ctx.replication.should_capture_writes()
+                {
                     ctx.replication.try_enqueue_write_argv(argv);
                 }
                 return Ok(ExecOutcome::default());

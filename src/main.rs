@@ -10,6 +10,7 @@ use foxkv::config::model::ReplicationConfig;
 use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
 use foxkv::persistence::rdb::RdbDirtyTracker;
 use foxkv::persistence::rdb_dirty_wrapper::StorageWithRdbDirty;
+use foxkv::replication::replica_client::start_replica_sync_task;
 use foxkv::replication::ReplicationManager;
 use foxkv::server::run_server;
 use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
@@ -17,6 +18,7 @@ use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> io::Result<()> {
+    init_logger();
     let config = load_config_from_args()
         .map_err(|err| io::Error::other(format!("failed to load config: {err}")))?;
     let write_threads = 16;
@@ -97,6 +99,9 @@ fn main() -> io::Result<()> {
         replication,
     ));
     runtime.block_on(async {
+        if ctx.config.is_replica() {
+            start_replica_sync_task(ctx.clone());
+        }
         let server = run_server(&addr, ctx.clone());
         tokio::select! {
             _ = server => {}
@@ -111,6 +116,13 @@ fn main() -> io::Result<()> {
         }
     });
     Ok(())
+}
+
+fn init_logger() {
+    let env = env_logger::Env::default().default_filter_or("info");
+    let mut builder = env_logger::Builder::from_env(env);
+    builder.format_timestamp_millis();
+    let _ = builder.try_init();
 }
 
 #[cfg(unix)]

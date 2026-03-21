@@ -2,6 +2,7 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
+use log::debug;
 use tokio::net::TcpListener;
 
 use crate::app_context::AppContext;
@@ -15,14 +16,20 @@ pub async fn run_server(addr: &str, ctx: Arc<AppContext>) -> io::Result<()> {
 
     let listener = TcpListener::bind(addr).await?;
     loop {
-        let (stream, _) = listener.accept().await?;
+        let (stream, peer_addr) = listener.accept().await?;
+        debug!("# New client connected from {}", peer_addr);
         if let Err(err) = stream.set_nodelay(true) {
             eprintln!("set_nodelay failed: {err}");
         }
         let ctx = Arc::clone(&ctx);
         tokio::spawn(async move {
-            if let Err(err) = connection::handle_connection(stream, ctx).await {
-                eprintln!("connection error: {err}");
+            match connection::handle_connection(stream, peer_addr, ctx).await {
+                Ok(()) => {
+                    debug!("# Client disconnected: {}", peer_addr);
+                }
+                Err(err) => {
+                    debug!("# Connection error from {}: {}", peer_addr, err);
+                }
             }
         });
     }
