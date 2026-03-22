@@ -89,7 +89,11 @@ pub fn cmd_hincrby(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resul
     let field = required_arg(args, 1)?;
     let delta = parse_i64(required_arg(args, 2)?)?;
     let mut map = get_hash(ctx, key)?.unwrap_or_default();
-    let current = map.get(field).map(|v| parse_i64(v)).transpose()?.unwrap_or(0);
+    let current = map
+        .get(field)
+        .map(|v| parse_i64(v))
+        .transpose()?
+        .unwrap_or(0);
     let next = current
         .checked_add(delta)
         .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
@@ -99,16 +103,16 @@ pub fn cmd_hincrby(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resul
     Ok(())
 }
 
-pub fn cmd_hincrbyfloat(
-    args: &[&[u8]],
-    ctx: &AppContext,
-    out: &mut Vec<u8>,
-) -> Result<(), String> {
+pub fn cmd_hincrbyfloat(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let field = required_arg(args, 1)?;
     let delta = parse_f64(required_arg(args, 2)?)?;
     let mut map = get_hash(ctx, key)?.unwrap_or_default();
-    let current = map.get(field).map(|v| parse_f64(v)).transpose()?.unwrap_or(0.0);
+    let current = map
+        .get(field)
+        .map(|v| parse_f64(v))
+        .transpose()?
+        .unwrap_or(0.0);
     let next = current + delta;
     if !next.is_finite() {
         return Err("ERR increment would produce NaN or Infinity".to_string());
@@ -296,4 +300,3 @@ fn parse_usize(raw: &[u8]) -> Result<usize, String> {
         .parse::<usize>()
         .map_err(|_| "ERR invalid cursor".to_string())
 }
-

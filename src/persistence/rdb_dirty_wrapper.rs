@@ -18,7 +18,10 @@ impl StorageWithRdbDirty {
         inner: Arc<dyn StorageEngine + Send + Sync>,
         dirty_tracker: Arc<RdbDirtyTracker>,
     ) -> Self {
-        Self { inner, dirty_tracker }
+        Self {
+            inner,
+            dirty_tracker,
+        }
     }
 }
 

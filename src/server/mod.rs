@@ -6,7 +6,7 @@ use log::debug;
 use tokio::net::TcpListener;
 
 use crate::app_context::AppContext;
-use crate::persistence::rdb::{maybe_trigger_bgsave, RdbRuntimeConfig};
+use crate::persistence::rdb::{RdbRuntimeConfig, maybe_trigger_bgsave};
 
 mod connection;
 
@@ -62,4 +62,3 @@ fn spawn_rdb_save_rules_task(ctx: &Arc<AppContext>) {
         }
     });
 }
-

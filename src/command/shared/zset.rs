@@ -2,8 +2,8 @@
 //! - dict: member -> (score, node_index) for O(1) ZSCORE, O(log n) ZREM
 //! - skiplist: ordered by (score, member) for ZRANGE, ZRANK, ZPOPMIN/MAX
 
-use std::collections::HashMap;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 const MAX_LEVEL: usize = 32;
 const HEAD_IDX: usize = 0;
@@ -300,7 +300,13 @@ impl ZSet {
     }
 
     /// Range by score. min/max inclusive unless ( prefix.
-    pub fn range_by_score(&self, min: f64, min_excl: bool, max: f64, max_excl: bool) -> Vec<(Vec<u8>, f64)> {
+    pub fn range_by_score(
+        &self,
+        min: f64,
+        min_excl: bool,
+        max: f64,
+        max_excl: bool,
+    ) -> Vec<(Vec<u8>, f64)> {
         let mut out = Vec::new();
         let mut x = self.nodes[HEAD_IDX].forward[0];
         while let Some(idx) = x {
@@ -319,7 +325,13 @@ impl ZSet {
     }
 
     /// Range by score in reverse.
-    pub fn range_by_score_rev(&self, min: f64, min_excl: bool, max: f64, max_excl: bool) -> Vec<(Vec<u8>, f64)> {
+    pub fn range_by_score_rev(
+        &self,
+        min: f64,
+        min_excl: bool,
+        max: f64,
+        max_excl: bool,
+    ) -> Vec<(Vec<u8>, f64)> {
         let mut out = self.range_by_score(min, min_excl, max, max_excl);
         out.reverse();
         out
@@ -331,7 +343,13 @@ impl ZSet {
     }
 
     /// Range by lex (member order). min/max: (excl, [inclusive. - and + for inf.
-    pub fn range_by_lex(&self, min: &[u8], min_inc: bool, max: &[u8], max_inc: bool) -> Vec<Vec<u8>> {
+    pub fn range_by_lex(
+        &self,
+        min: &[u8],
+        min_inc: bool,
+        max: &[u8],
+        max_inc: bool,
+    ) -> Vec<Vec<u8>> {
         let mut out = Vec::new();
         let mut x = self.nodes[HEAD_IDX].forward[0];
         while let Some(idx) = x {
@@ -359,7 +377,13 @@ impl ZSet {
     }
 
     /// Range by lex reverse.
-    pub fn range_by_lex_rev(&self, min: &[u8], min_inc: bool, max: &[u8], max_inc: bool) -> Vec<Vec<u8>> {
+    pub fn range_by_lex_rev(
+        &self,
+        min: &[u8],
+        min_inc: bool,
+        max: &[u8],
+        max_inc: bool,
+    ) -> Vec<Vec<u8>> {
         let mut out = self.range_by_lex(min, min_inc, max, max_inc);
         out.reverse();
         out
@@ -481,7 +505,9 @@ mod tests {
     #[test]
     fn add_returns_error_when_score_is_not_finite() {
         let mut z = ZSet::new();
-        let err = z.add(b"a".to_vec(), f64::INFINITY).expect_err("should fail");
+        let err = z
+            .add(b"a".to_vec(), f64::INFINITY)
+            .expect_err("should fail");
         assert_eq!(err, "ERR value is not a valid float");
     }
 

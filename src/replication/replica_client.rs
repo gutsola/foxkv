@@ -167,7 +167,9 @@ async fn expect_simple_ok_or_pong(stream: &mut TcpStream) -> io::Result<()> {
         return Ok(());
     }
     let msg = String::from_utf8_lossy(&line);
-    Err(io::Error::other(format!("unexpected handshake reply: {msg}")))
+    Err(io::Error::other(format!(
+        "unexpected handshake reply: {msg}"
+    )))
 }
 
 async fn read_line(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
@@ -264,13 +266,19 @@ mod tests {
     #[test]
     fn encode_command_handles_replconf_command() {
         let result = encode_command_for_test(&[b"REPLCONF", b"listening-port", b"6379"]);
-        assert_eq!(result, b"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6379\r\n");
+        assert_eq!(
+            result,
+            b"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6379\r\n"
+        );
     }
 
     #[test]
     fn encode_command_handles_ack_command() {
         let result = encode_command_for_test(&[b"REPLCONF", b"ACK", b"12345"]);
-        assert_eq!(result, b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$5\r\n12345\r\n");
+        assert_eq!(
+            result,
+            b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$5\r\n12345\r\n"
+        );
     }
 
     #[test]
@@ -282,7 +290,10 @@ mod tests {
     #[test]
     fn encode_command_handles_binary_data() {
         let result = encode_command_for_test(&[b"SET", b"key", b"\x00\x01\x02"]);
-        assert_eq!(result, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\n\x00\x01\x02\r\n");
+        assert_eq!(
+            result,
+            b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\n\x00\x01\x02\r\n"
+        );
     }
 
     #[test]

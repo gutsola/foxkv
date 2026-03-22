@@ -78,4 +78,3 @@ mod tests {
         assert_eq!(out, b":1\r\n:0\r\n");
     }
 }
-

@@ -32,11 +32,7 @@ fn format_size_for_config(bytes: u64) -> String {
     }
 }
 
-fn format_client_output_buffer_limit(
-    hard: u64,
-    soft: u64,
-    soft_secs: u32,
-) -> String {
+fn format_client_output_buffer_limit(hard: u64, soft: u64, soft_secs: u32) -> String {
     format!(
         "{} {} {}",
         format_size_for_config(hard),
@@ -79,24 +75,92 @@ pub fn cmd_config(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
         ("bind", config.bind.join(" ")),
         ("dir", config.rdb.dir.to_string_lossy().to_string()),
         ("dbfilename", config.rdb.dbfilename.clone()),
-        ("stop-writes-on-bgsave-error", if config.rdb.stop_writes_on_bgsave_error { "yes" } else { "no" }.to_string()),
-        ("rdbcompression", if config.rdb.rdbcompression { "yes" } else { "no" }.to_string()),
-        ("rdbchecksum", if config.rdb.rdbchecksum { "yes" } else { "no" }.to_string()),
-        ("rdb-save-incremental-fsync", if config.rdb.rdb_save_incremental_fsync { "yes" } else { "no" }.to_string()),
-        ("appendonly", if config.aof.enabled { "yes" } else { "no" }.to_string()),
+        (
+            "stop-writes-on-bgsave-error",
+            if config.rdb.stop_writes_on_bgsave_error {
+                "yes"
+            } else {
+                "no"
+            }
+            .to_string(),
+        ),
+        (
+            "rdbcompression",
+            if config.rdb.rdbcompression {
+                "yes"
+            } else {
+                "no"
+            }
+            .to_string(),
+        ),
+        (
+            "rdbchecksum",
+            if config.rdb.rdbchecksum { "yes" } else { "no" }.to_string(),
+        ),
+        (
+            "rdb-save-incremental-fsync",
+            if config.rdb.rdb_save_incremental_fsync {
+                "yes"
+            } else {
+                "no"
+            }
+            .to_string(),
+        ),
+        (
+            "appendonly",
+            if config.aof.enabled { "yes" } else { "no" }.to_string(),
+        ),
         ("appendfilename", config.aof.appendfilename.clone()),
-        ("appendfsync", match config.aof.appendfsync {
-            crate::config::model::AppendFsyncPolicy::Always => "always",
-            crate::config::model::AppendFsyncPolicy::EverySec => "everysec",
-            crate::config::model::AppendFsyncPolicy::No => "no",
-        }.to_string()),
-        ("auto-aof-rewrite-percentage", config.aof.auto_rewrite_percentage.to_string()),
-        ("auto-aof-rewrite-min-size", format_size_for_config(config.aof.auto_rewrite_min_size_bytes)),
-        ("aof-use-rdb-preamble", if config.aof.use_rdb_preamble { "yes" } else { "no" }.to_string()),
-        ("aof-rewrite-incremental-fsync", if config.aof.aof_rewrite_incremental_fsync { "yes" } else { "no" }.to_string()),
-        ("requirepass", config.requirepass.clone().unwrap_or_default()),
-        ("maxclients", config.maxclients.map(|n| n.to_string()).unwrap_or_else(|| "10000".to_string())),
-        ("client-output-buffer-limit", client_output_buffer_limit_value),
+        (
+            "appendfsync",
+            match config.aof.appendfsync {
+                crate::config::model::AppendFsyncPolicy::Always => "always",
+                crate::config::model::AppendFsyncPolicy::EverySec => "everysec",
+                crate::config::model::AppendFsyncPolicy::No => "no",
+            }
+            .to_string(),
+        ),
+        (
+            "auto-aof-rewrite-percentage",
+            config.aof.auto_rewrite_percentage.to_string(),
+        ),
+        (
+            "auto-aof-rewrite-min-size",
+            format_size_for_config(config.aof.auto_rewrite_min_size_bytes),
+        ),
+        (
+            "aof-use-rdb-preamble",
+            if config.aof.use_rdb_preamble {
+                "yes"
+            } else {
+                "no"
+            }
+            .to_string(),
+        ),
+        (
+            "aof-rewrite-incremental-fsync",
+            if config.aof.aof_rewrite_incremental_fsync {
+                "yes"
+            } else {
+                "no"
+            }
+            .to_string(),
+        ),
+        (
+            "requirepass",
+            config.requirepass.clone().unwrap_or_default(),
+        ),
+        (
+            "maxclients",
+            config
+                .maxclients
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "10000".to_string()),
+        ),
+        (
+            "client-output-buffer-limit",
+            client_output_buffer_limit_value,
+        ),
         ("lua-time-limit", config.lua_time_limit.to_string()),
         ("hz", config.hz.to_string()),
         (
@@ -121,7 +185,10 @@ pub fn cmd_config(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
             pairs.push((*name, value.clone()));
         } else {
             for pattern in patterns {
-                if std::str::from_utf8(pattern).map(|p| p.eq_ignore_ascii_case(name)).unwrap_or(false) {
+                if std::str::from_utf8(pattern)
+                    .map(|p| p.eq_ignore_ascii_case(name))
+                    .unwrap_or(false)
+                {
                     pairs.push((*name, value.clone()));
                     break;
                 }
@@ -205,7 +272,11 @@ pub fn cmd_info(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
         || section.eq_ignore_ascii_case("default")
     {
         let m = ctx.replication.replication_metrics();
-        let role = if ctx.config.is_replica() { "slave" } else { "master" };
+        let role = if ctx.config.is_replica() {
+            "slave"
+        } else {
+            "master"
+        };
         buf.push_str("# Replication\r\n");
         buf.push_str(&format!("role:{role}\r\n"));
         buf.push_str(&format!("master_replid:{}\r\n", m.replid));
@@ -250,12 +321,7 @@ fn cmd_memory_stats(ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let keys = ctx.db.iter_live_keys();
     let keys_count = keys.len();
     let dataset_bytes = keys.iter().fold(0_usize, |acc, k| {
-        acc + k.len()
-            + ctx
-                .db
-                .get_entry(k)
-                .map(|e| e.value.len())
-                .unwrap_or(0)
+        acc + k.len() + ctx.db.get_entry(k).map(|e| e.value.len()).unwrap_or(0)
     });
     let bytes_per_key = if keys_count > 0 {
         dataset_bytes / keys_count

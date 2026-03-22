@@ -81,14 +81,20 @@ mod tests {
     #[test]
     fn encode_command_handles_multiple_args() {
         let result = encode_command(b"MSET", &[b"k1", b"v1", b"k2", b"v2"]);
-        assert_eq!(result, b"*5\r\n$4\r\nMSET\r\n$2\r\nk1\r\n$2\r\nv1\r\n$2\r\nk2\r\n$2\r\nv2\r\n");
+        assert_eq!(
+            result,
+            b"*5\r\n$4\r\nMSET\r\n$2\r\nk1\r\n$2\r\nv1\r\n$2\r\nk2\r\n$2\r\nv2\r\n"
+        );
     }
 
     #[test]
     fn encode_pairs_command_produces_correct_structure() {
         let pairs: &[(&[u8], &[u8])] = &[(b"key1", b"val1"), (b"key2", b"val2")];
         let result = encode_pairs_command(b"MSET", pairs);
-        assert_eq!(result, b"*5\r\n$4\r\nMSET\r\n$4\r\nkey1\r\n$4\r\nval1\r\n$4\r\nkey2\r\n$4\r\nval2\r\n");
+        assert_eq!(
+            result,
+            b"*5\r\n$4\r\nMSET\r\n$4\r\nkey1\r\n$4\r\nval1\r\n$4\r\nkey2\r\n$4\r\nval2\r\n"
+        );
     }
 
     #[test]
@@ -101,37 +107,55 @@ mod tests {
     #[test]
     fn encode_set_command_without_ttl_or_condition() {
         let result = encode_set_command(b"mykey", b"myvalue", None, SetCondition::None);
-        assert_eq!(result, b"*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n");
+        assert_eq!(
+            result,
+            b"*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n"
+        );
     }
 
     #[test]
     fn encode_set_command_with_ttl() {
         let result = encode_set_command(b"key", b"value", Some(5000), SetCondition::None);
-        assert_eq!(result, b"*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$4\r\n5000\r\n");
+        assert_eq!(
+            result,
+            b"*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$4\r\n5000\r\n"
+        );
     }
 
     #[test]
     fn encode_set_command_with_nx_condition() {
         let result = encode_set_command(b"key", b"value", None, SetCondition::Nx);
-        assert_eq!(result, b"*4\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nNX\r\n");
+        assert_eq!(
+            result,
+            b"*4\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nNX\r\n"
+        );
     }
 
     #[test]
     fn encode_set_command_with_xx_condition() {
         let result = encode_set_command(b"key", b"value", None, SetCondition::Xx);
-        assert_eq!(result, b"*4\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nXX\r\n");
+        assert_eq!(
+            result,
+            b"*4\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nXX\r\n"
+        );
     }
 
     #[test]
     fn encode_set_command_with_ttl_and_condition() {
         let result = encode_set_command(b"key", b"val", Some(10000), SetCondition::Nx);
-        assert_eq!(result, b"*6\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\nval\r\n$2\r\nPX\r\n$5\r\n10000\r\n$2\r\nNX\r\n");
+        assert_eq!(
+            result,
+            b"*6\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\nval\r\n$2\r\nPX\r\n$5\r\n10000\r\n$2\r\nNX\r\n"
+        );
     }
 
     #[test]
     fn encode_command_handles_binary_data() {
         let result = encode_command(b"SET", &[b"key", b"\x00\x01\x02"]);
-        assert_eq!(result, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\n\x00\x01\x02\r\n");
+        assert_eq!(
+            result,
+            b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\n\x00\x01\x02\r\n"
+        );
     }
 
     #[test]

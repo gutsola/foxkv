@@ -1,5 +1,5 @@
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use crate::config::AppConfig;
 use crate::persistence::aof::AofEngine;

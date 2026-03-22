@@ -122,7 +122,8 @@ mod tests {
     fn replay_commands_replays_del_command() {
         let path = temp_aof_path("del_command");
         cleanup(&path);
-        let content = b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n*2\r\n$3\r\nDEL\r\n$3\r\nkey\r\n";
+        let content =
+            b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n*2\r\n$3\r\nDEL\r\n$3\r\nkey\r\n";
         write_aof_content(&path, content);
         let db = test_db();
         replay_commands(&path, db.clone()).unwrap();
@@ -134,7 +135,8 @@ mod tests {
     fn replay_commands_replays_incr_command() {
         let path = temp_aof_path("incr_command");
         cleanup(&path);
-        let content = b"*3\r\n$3\r\nSET\r\n$7\r\ncounter\r\n$1\r\n0\r\n*2\r\n$4\r\nINCR\r\n$7\r\ncounter\r\n";
+        let content =
+            b"*3\r\n$3\r\nSET\r\n$7\r\ncounter\r\n$1\r\n0\r\n*2\r\n$4\r\nINCR\r\n$7\r\ncounter\r\n";
         write_aof_content(&path, content);
         let db = test_db();
         replay_commands(&path, db.clone()).unwrap();
@@ -226,7 +228,8 @@ mod tests {
     fn replay_commands_replays_set_with_expire() {
         let path = temp_aof_path("set_with_expire");
         cleanup(&path);
-        let content = b"*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$10\r\n9999999999\r\n";
+        let content =
+            b"*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$10\r\n9999999999\r\n";
         write_aof_content(&path, content);
         let db = test_db();
         replay_commands(&path, db.clone()).unwrap();

@@ -124,8 +124,7 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                         line_no + 1
                     )));
                 }
-                config.rdb.rdbchecksum =
-                    parse_yes_no(&tokens[1], "rdbchecksum", line_no + 1)?;
+                config.rdb.rdbchecksum = parse_yes_no(&tokens[1], "rdbchecksum", line_no + 1)?;
             }
             "rdb-save-incremental-fsync" => {
                 if tokens.len() != 2 {
@@ -232,7 +231,11 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                 let limit = ClientOutputBufferLimit {
                     hard_limit_bytes: parse_size_bytes(&tokens[2], line_no + 1)?,
                     soft_limit_bytes: parse_size_bytes(&tokens[3], line_no + 1)?,
-                    soft_seconds: parse_u32(&tokens[4], "client-output-buffer-limit soft_seconds", line_no + 1)?,
+                    soft_seconds: parse_u32(
+                        &tokens[4],
+                        "client-output-buffer-limit soft_seconds",
+                        line_no + 1,
+                    )?,
                 };
                 match class.as_str() {
                     "normal" => config.client_output_buffer_limits.normal = limit,
@@ -241,7 +244,8 @@ pub fn apply_redis_conf(content: &str, config: &mut AppConfig) -> Result<(), Con
                     _ => {
                         return Err(ConfigError::Parse(format!(
                             "line {}: client-output-buffer-limit class must be normal/replica/pubsub, got '{}'",
-                            line_no + 1, tokens[1]
+                            line_no + 1,
+                            tokens[1]
                         )));
                     }
                 }

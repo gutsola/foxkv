@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ahash::RandomState;
-use dashmap::mapref::entry::Entry as DashEntry;
 use dashmap::DashMap;
+use dashmap::mapref::entry::Entry as DashEntry;
 
 use crate::storage::db::StorageEngine;
 use crate::storage::model::{DbConfig, DbError, ValueEntry};
@@ -438,7 +438,9 @@ mod tests {
             .count();
 
         assert_eq!(success_count, 1);
-        let got = db.get_entry(b"k1").expect("key should exist after replacement");
+        let got = db
+            .get_entry(b"k1")
+            .expect("key should exist after replacement");
         assert!(got.value.starts_with(b"new-"));
     }
 }

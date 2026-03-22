@@ -450,4 +450,3 @@ fn parse_usize(raw: &[u8]) -> Result<usize, String> {
 fn _append_syntax_error(out: &mut Vec<u8>) {
     append_error_response(out, "ERR syntax error");
 }
-

@@ -5,9 +5,7 @@ use bytes::Bytes;
 use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::time::current_time_ms;
-use crate::command::shared::typed_value::{
-    TypedValue, decode_value, encode_set, wrong_type_error,
-};
+use crate::command::shared::typed_value::{TypedValue, decode_value, encode_set, wrong_type_error};
 use crate::command::shared::wire::{append_array_header, append_bool_integer, append_bulk_items};
 use crate::resp::{append_bulk_response, append_integer_response};
 use crate::storage::ValueEntry;
@@ -83,11 +81,7 @@ pub fn cmd_sinter(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
     Ok(())
 }
 
-pub fn cmd_sinterstore(
-    args: &[&[u8]],
-    ctx: &AppContext,
-    out: &mut Vec<u8>,
-) -> Result<(), String> {
+pub fn cmd_sinterstore(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let destination = required_arg(args, 0)?;
     if args.len() < 2 {
         return Err("ERR wrong number of arguments for 'sinterstore' command".to_string());
@@ -242,11 +236,7 @@ pub fn cmd_sunion(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
     Ok(())
 }
 
-pub fn cmd_sunionstore(
-    args: &[&[u8]],
-    ctx: &AppContext,
-    out: &mut Vec<u8>,
-) -> Result<(), String> {
+pub fn cmd_sunionstore(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let destination = required_arg(args, 0)?;
     if args.len() < 2 {
         return Err("ERR wrong number of arguments for 'sunionstore' command".to_string());
@@ -417,8 +407,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::{
-        parse_i64, parse_usize, pick_distinct_members, pick_one_random_member, pick_repeated_members,
-        set_to_members, take_one_random_member, xorshift64,
+        parse_i64, parse_usize, pick_distinct_members, pick_one_random_member,
+        pick_repeated_members, set_to_members, take_one_random_member, xorshift64,
     };
 
     #[test]

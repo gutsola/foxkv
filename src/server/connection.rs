@@ -89,11 +89,10 @@ async fn enter_replica_stream(
     if send_empty_rdb {
         let db = Arc::clone(&ctx.db);
         let with_checksum = ctx.config.rdb.rdbchecksum;
-        let rdb_payload = task::spawn_blocking(move || {
-            rdb::build_rdb_snapshot_bytes(db.as_ref(), with_checksum)
-        })
-        .await
-        .map_err(|err| io::Error::other(format!("rdb snapshot task failed: {err}")))??;
+        let rdb_payload =
+            task::spawn_blocking(move || rdb::build_rdb_snapshot_bytes(db.as_ref(), with_checksum))
+                .await
+                .map_err(|err| io::Error::other(format!("rdb snapshot task failed: {err}")))??;
         stream
             .write_all(format!("${}\r\n", rdb_payload.len()).as_bytes())
             .await?;
@@ -151,11 +150,7 @@ fn summarize_response(out: &[u8]) -> String {
         .windows(2)
         .position(|w| w == b"\r\n")
         .unwrap_or(out.len().saturating_sub(1));
-    let line = if end < out.len() {
-        &out[..end]
-    } else {
-        out
-    };
+    let line = if end < out.len() { &out[..end] } else { out };
     preview_bytes(line)
 }
 

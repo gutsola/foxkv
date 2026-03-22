@@ -112,7 +112,7 @@ fn execute_argv_command_inner(
             }
         };
     }
-    
+
     types::string::string_commands!(emit_dispatch);
     types::hash::hash_commands!(emit_dispatch);
     types::list::list_commands!(emit_dispatch);
@@ -210,7 +210,9 @@ fn parse_usize_line(input: &[u8], mut cursor: usize) -> Option<(usize, usize)> {
 mod tests {
     use std::sync::Arc;
 
-    use super::{execute_argv_command, execute_replication_argv_command, parse_argv_frame, ExecTransition};
+    use super::{
+        ExecTransition, execute_argv_command, execute_replication_argv_command, parse_argv_frame,
+    };
     use crate::app_context::AppContext;
     use crate::config::default_config;
     use crate::replication::ReplicationManager;

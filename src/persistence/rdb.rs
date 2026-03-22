@@ -6,18 +6,18 @@
 //! - save rules: auto-trigger BGSAVE when conditions met (e.g. 900s + 1 change)
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Cursor;
 use std::fs::{self, File};
+use std::io::Cursor;
 use std::io::{self, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use crc64::crc64;
 
-use crate::command::shared::typed_value::{decode_value, TypedValue};
+use crate::command::shared::typed_value::{TypedValue, decode_value};
 use crate::command::shared::zset::ZSet;
 use crate::config::model::{RdbConfig, SaveRule};
 use crate::storage::StorageEngine;
@@ -124,7 +124,10 @@ pub fn save(
 
 /// Build an in-memory RDB snapshot payload for replication FULLRESYNC.
 /// Returns the raw RDB bytes without RESP framing.
-pub fn build_rdb_snapshot_bytes(db: &dyn StorageEngine, with_checksum: bool) -> io::Result<Vec<u8>> {
+pub fn build_rdb_snapshot_bytes(
+    db: &dyn StorageEngine,
+    with_checksum: bool,
+) -> io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     write_rdb(db, &mut buf)?;
     if with_checksum {
@@ -213,7 +216,10 @@ fn load_from_reader(db: &dyn StorageEngine, r: &mut impl Read) -> io::Result<usi
                     );
                     keys_loaded += 1;
                 } else {
-                    return Err(io::Error::other(format!("unknown RDB opcode: 0x{:02x}", opcode)));
+                    return Err(io::Error::other(format!(
+                        "unknown RDB opcode: 0x{:02x}",
+                        opcode
+                    )));
                 }
             }
         }
@@ -311,7 +317,9 @@ fn write_rdb(db: &dyn StorageEngine, w: &mut dyn Write) -> io::Result<()> {
 
     let now_ms = now_ms();
     for key in keys {
-        let Some(entry) = db.get_entry(&key) else { continue };
+        let Some(entry) = db.get_entry(&key) else {
+            continue;
+        };
 
         if let Some(expire_at_ms) = entry.expire_at_ms {
             if expire_at_ms <= now_ms {
@@ -470,7 +478,10 @@ fn read_rdb_value(r: &mut impl Read, value_type: u8) -> io::Result<Vec<u8>> {
             }
             Ok(encode_hash(&map))
         }
-        _ => Err(io::Error::other(format!("unknown value type: {}", value_type))),
+        _ => Err(io::Error::other(format!(
+            "unknown value type: {}",
+            value_type
+        ))),
     }
 }
 
@@ -498,8 +509,8 @@ fn encode_hash(map: &BTreeMap<Vec<u8>, Vec<u8>>) -> Vec<u8> {
 mod tests {
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::atomic::Ordering;
     use std::sync::Arc;
+    use std::sync::atomic::Ordering;
     use std::thread;
     use std::time::Duration;
 
@@ -524,7 +535,10 @@ mod tests {
     fn create_test_config(path: &PathBuf) -> RdbRuntimeConfig {
         RdbRuntimeConfig {
             file_path: path.clone(),
-            save_rules: vec![SaveRule { seconds: 900, changes: 1 }],
+            save_rules: vec![SaveRule {
+                seconds: 900,
+                changes: 1,
+            }],
             rdbchecksum: true,
         }
     }
@@ -532,7 +546,10 @@ mod tests {
     #[test]
     fn rdb_runtime_config_from_config_converts_correctly() {
         let cfg = RdbConfig {
-            save_rules: vec![SaveRule { seconds: 60, changes: 10 }],
+            save_rules: vec![SaveRule {
+                seconds: 60,
+                changes: 10,
+            }],
             dbfilename: "dump.rdb".to_string(),
             dir: PathBuf::from("/data"),
             stop_writes_on_bgsave_error: true,
@@ -832,14 +849,22 @@ mod tests {
         );
         let config = RdbRuntimeConfig {
             file_path: path.clone(),
-            save_rules: vec![SaveRule { seconds: 0, changes: 1 }],
+            save_rules: vec![SaveRule {
+                seconds: 0,
+                changes: 1,
+            }],
             rdbchecksum: true,
         };
         let tracker = Arc::new(RdbDirtyTracker::new());
         tracker.incr_dirty();
         tracker.set_last_save(0);
         let bgsave_in_progress = Arc::new(AtomicBool::new(false));
-        maybe_trigger_bgsave(db.clone(), config, tracker.clone(), bgsave_in_progress.clone());
+        maybe_trigger_bgsave(
+            db.clone(),
+            config,
+            tracker.clone(),
+            bgsave_in_progress.clone(),
+        );
         thread::sleep(Duration::from_millis(100));
         let mut attempts = 0;
         while bgsave_in_progress.load(Ordering::SeqCst) && attempts < 50 {
@@ -858,7 +883,12 @@ mod tests {
         let config = create_test_config(&path);
         let tracker = Arc::new(RdbDirtyTracker::new());
         let bgsave_in_progress = Arc::new(AtomicBool::new(false));
-        maybe_trigger_bgsave(db.clone(), config, tracker.clone(), bgsave_in_progress.clone());
+        maybe_trigger_bgsave(
+            db.clone(),
+            config,
+            tracker.clone(),
+            bgsave_in_progress.clone(),
+        );
         thread::sleep(Duration::from_millis(50));
         assert!(!path.exists());
         cleanup(&path);

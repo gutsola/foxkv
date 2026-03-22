@@ -1,10 +1,12 @@
 use bytes::Bytes;
 
 use crate::app_context::AppContext;
+use crate::command::SetCondition;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::time::current_time_ms;
-use crate::command::SetCondition;
-use crate::resp::{append_bulk_response, append_integer_response, append_simple_response, parse_ascii_u64};
+use crate::resp::{
+    append_bulk_response, append_integer_response, append_simple_response, parse_ascii_u64,
+};
 use crate::storage::ValueEntry;
 
 macro_rules! string_commands {
@@ -363,7 +365,11 @@ pub fn cmd_setrange(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resu
 
 pub fn cmd_strlen(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
-    let len = ctx.db.get_entry(key).map(|entry| entry.value.len()).unwrap_or(0);
+    let len = ctx
+        .db
+        .get_entry(key)
+        .map(|entry| entry.value.len())
+        .unwrap_or(0);
     append_integer_response(out, len as i64);
     Ok(())
 }
@@ -411,8 +417,12 @@ fn execute_integer_delta_with_raw(
         .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
     if let Some(aof_engine) = ctx.aof.as_ref() {
         let append_result = match raw_delta {
-            Some(arg) if command.eq_ignore_ascii_case(b"INCRBY") => aof_engine.append_incrby(key, arg),
-            Some(arg) if command.eq_ignore_ascii_case(b"DECRBY") => aof_engine.append_decrby(key, arg),
+            Some(arg) if command.eq_ignore_ascii_case(b"INCRBY") => {
+                aof_engine.append_incrby(key, arg)
+            }
+            Some(arg) if command.eq_ignore_ascii_case(b"DECRBY") => {
+                aof_engine.append_decrby(key, arg)
+            }
             _ if command.eq_ignore_ascii_case(b"INCR") => aof_engine.append_incr(key),
             _ if command.eq_ignore_ascii_case(b"DECR") => aof_engine.append_decr(key),
             _ => Ok(()),
@@ -489,11 +499,7 @@ fn slice_by_redis_range(value: &[u8], start: i64, end: i64) -> &[u8] {
 }
 
 fn normalize_index(index: i64, len: i64) -> i64 {
-    if index < 0 {
-        len + index
-    } else {
-        index
-    }
+    if index < 0 { len + index } else { index }
 }
 
 fn append_array_header(out: &mut Vec<u8>, len: usize) {
@@ -582,7 +588,11 @@ fn parse_ttl_ms(ttl_kind: &[u8], ttl_raw: &[u8]) -> Result<u64, String> {
 }
 
 fn append_slice_range(ctx: &AppContext, out: &mut Vec<u8>, key: &[u8], start: i64, end: i64) {
-    let value = ctx.db.get_entry(key).map(|entry| entry.value).unwrap_or_default();
+    let value = ctx
+        .db
+        .get_entry(key)
+        .map(|entry| entry.value)
+        .unwrap_or_default();
     let slice = slice_by_redis_range(&value, start, end);
     append_bulk_response(out, Some(slice));
 }
@@ -590,8 +600,8 @@ fn append_slice_range(ctx: &AppContext, out: &mut Vec<u8>, key: &[u8], start: i6
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_index, parse_f64_argument, parse_i64_argument, parse_offset, parse_set_options,
-        parse_ttl_ms, slice_by_redis_range, SetCondition,
+        SetCondition, normalize_index, parse_f64_argument, parse_i64_argument, parse_offset,
+        parse_set_options, parse_ttl_ms, slice_by_redis_range,
     };
 
     #[test]

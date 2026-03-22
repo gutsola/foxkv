@@ -2,8 +2,8 @@ use crate::app_context::AppContext;
 use crate::command::shared::args::required_arg;
 use crate::command::shared::time::current_time_ms;
 use crate::command::shared::wire::{append_bulk_items, append_scan_response};
-use crate::resp::{append_bulk_response, append_integer_response, append_simple_response};
 use crate::resp::parse_ascii_u64;
+use crate::resp::{append_bulk_response, append_integer_response, append_simple_response};
 
 macro_rules! generic_commands {
     ($m:ident) => {
@@ -60,10 +60,7 @@ pub fn cmd_exists(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
     if args.is_empty() {
         return Err("ERR wrong number of arguments for 'exists' command".to_string());
     }
-    let count = args
-        .iter()
-        .filter(|k| ctx.db.contains_live_key(k))
-        .count() as i64;
+    let count = args.iter().filter(|k| ctx.db.contains_live_key(k)).count() as i64;
     append_integer_response(out, count);
     Ok(())
 }
@@ -75,7 +72,15 @@ pub fn cmd_expire(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
     let ttl_ms = seconds
         .checked_mul(1000)
         .ok_or_else(|| "ERR invalid expire time".to_string())?;
-    set_expire(ctx, out, key, ttl_ms, |now| now.saturating_add(ttl_ms), b"EXPIRE", Some(seconds_raw))
+    set_expire(
+        ctx,
+        out,
+        key,
+        ttl_ms,
+        |now| now.saturating_add(ttl_ms),
+        b"EXPIRE",
+        Some(seconds_raw),
+    )
 }
 
 pub fn cmd_expireat(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
@@ -85,7 +90,14 @@ pub fn cmd_expireat(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resu
     let expire_at_ms = timestamp_secs
         .checked_mul(1000)
         .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
-    set_expire_at(ctx, out, key, expire_at_ms, b"EXPIREAT", Some(timestamp_raw))
+    set_expire_at(
+        ctx,
+        out,
+        key,
+        expire_at_ms,
+        b"EXPIREAT",
+        Some(timestamp_raw),
+    )
 }
 
 pub fn cmd_keys(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
@@ -126,14 +138,29 @@ pub fn cmd_pexpire(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resul
     if ttl_ms == 0 {
         return Err("ERR invalid expire time".to_string());
     }
-    set_expire(ctx, out, key, ttl_ms, |now| now.saturating_add(ttl_ms), b"PEXPIRE", Some(ms_raw))
+    set_expire(
+        ctx,
+        out,
+        key,
+        ttl_ms,
+        |now| now.saturating_add(ttl_ms),
+        b"PEXPIRE",
+        Some(ms_raw),
+    )
 }
 
 pub fn cmd_pexpireat(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let timestamp_ms_raw = required_arg(args, 1)?;
     let expire_at_ms = parse_timestamp_ms(timestamp_ms_raw)?;
-    set_expire_at(ctx, out, key, expire_at_ms, b"PEXPIREAT", Some(timestamp_ms_raw))
+    set_expire_at(
+        ctx,
+        out,
+        key,
+        expire_at_ms,
+        b"PEXPIREAT",
+        Some(timestamp_ms_raw),
+    )
 }
 
 pub fn cmd_pttl(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
@@ -223,8 +250,12 @@ where
     if let Some(aof_engine) = ctx.aof.as_ref() {
         if let Some(arg) = raw_arg {
             match cmd {
-                b"EXPIRE" => aof_engine.append_expire(key, arg).map_err(|e| format!("ERR AOF append failed: {e}"))?,
-                b"PEXPIRE" => aof_engine.append_pexpire(key, arg).map_err(|e| format!("ERR AOF append failed: {e}"))?,
+                b"EXPIRE" => aof_engine
+                    .append_expire(key, arg)
+                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
+                b"PEXPIRE" => aof_engine
+                    .append_pexpire(key, arg)
+                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
                 _ => {}
             }
         }
@@ -251,8 +282,12 @@ fn set_expire_at(
     if let Some(aof_engine) = ctx.aof.as_ref() {
         if let Some(arg) = raw_arg {
             match cmd {
-                b"EXPIREAT" => aof_engine.append_expireat(key, arg).map_err(|e| format!("ERR AOF append failed: {e}"))?,
-                b"PEXPIREAT" => aof_engine.append_pexpireat(key, arg).map_err(|e| format!("ERR AOF append failed: {e}"))?,
+                b"EXPIREAT" => aof_engine
+                    .append_expireat(key, arg)
+                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
+                b"PEXPIREAT" => aof_engine
+                    .append_pexpireat(key, arg)
+                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
                 _ => {}
             }
         }
@@ -299,8 +334,11 @@ fn parse_ttl_seconds(raw: &[u8]) -> Result<u64, String> {
 }
 
 fn parse_timestamp_seconds(raw: &[u8]) -> Result<u64, String> {
-    let s = std::str::from_utf8(raw).map_err(|_| "ERR value is not an integer or out of range".to_string())?;
-    let v: i64 = s.parse().map_err(|_| "ERR value is not an integer or out of range".to_string())?;
+    let s = std::str::from_utf8(raw)
+        .map_err(|_| "ERR value is not an integer or out of range".to_string())?;
+    let v: i64 = s
+        .parse()
+        .map_err(|_| "ERR value is not an integer or out of range".to_string())?;
     Ok(if v < 0 { 0 } else { v as u64 })
 }
 
@@ -416,9 +454,10 @@ mod tests {
     use crate::storage::{DashMapStorageEngine, DbConfig, StorageEngine, ValueEntry};
 
     use super::{
-        cmd_exists, cmd_scan, cmd_ttl, cmd_type, cmd_dump, cmd_persist, cmd_del,
-        match_glob, parse_scan_cursor, parse_timestamp_ms, parse_timestamp_seconds, parse_ttl_ms,
-        parse_ttl_seconds, value_type_name, MAGIC, TYPE_HASH, TYPE_LIST, TYPE_SET, TYPE_ZSET,
+        MAGIC, TYPE_HASH, TYPE_LIST, TYPE_SET, TYPE_ZSET, cmd_del, cmd_dump, cmd_exists,
+        cmd_persist, cmd_scan, cmd_ttl, cmd_type, match_glob, parse_scan_cursor,
+        parse_timestamp_ms, parse_timestamp_seconds, parse_ttl_ms, parse_ttl_seconds,
+        value_type_name,
     };
 
     fn test_ctx() -> AppContext {
@@ -584,7 +623,12 @@ mod tests {
         assert_eq!(out, b"+hash\r\n");
 
         out.clear();
-        cmd_scan(&[b"0", b"MATCH", b"hash:*", b"COUNT", b"10"], &ctx, &mut out).expect("scan");
+        cmd_scan(
+            &[b"0", b"MATCH", b"hash:*", b"COUNT", b"10"],
+            &ctx,
+            &mut out,
+        )
+        .expect("scan");
         let s = String::from_utf8(out).expect("utf8");
         assert!(s.contains("hash:1"));
         assert!(!s.contains("str:1"));

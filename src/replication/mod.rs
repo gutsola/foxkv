@@ -48,13 +48,8 @@ pub struct ReplicationSubscription {
 
 #[derive(Debug, Clone)]
 pub enum PsyncDecision {
-    Continue {
-        start_offset: u64,
-    },
-    FullResync {
-        replid: String,
-        current_offset: u64,
-    },
+    Continue { start_offset: u64 },
+    FullResync { replid: String, current_offset: u64 },
 }
 
 #[derive(Debug)]
@@ -283,7 +278,8 @@ fn generate_replid() -> String {
         seed ^= seed << 8;
         *item = HEX[(seed & 0x0f) as usize];
     }
-    String::from_utf8(out.to_vec()).unwrap_or_else(|_| "0000000000000000000000000000000000000000".to_string())
+    String::from_utf8(out.to_vec())
+        .unwrap_or_else(|_| "0000000000000000000000000000000000000000".to_string())
 }
 
 #[derive(Debug, Clone)]
@@ -512,13 +508,12 @@ mod tests {
 
     #[test]
     fn encode_queued_write_produces_valid_resp() {
-        let argv: Vec<Bytes> = vec![
-            Bytes::from("SET"),
-            Bytes::from("key"),
-            Bytes::from("value"),
-        ];
+        let argv: Vec<Bytes> = vec![Bytes::from("SET"), Bytes::from("key"), Bytes::from("value")];
         let result = encode_queued_write(&argv);
-        assert_eq!(&result[..], b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n");
+        assert_eq!(
+            &result[..],
+            b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+        );
     }
 
     #[test]

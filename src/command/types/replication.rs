@@ -1,6 +1,6 @@
 use crate::app_context::AppContext;
-use crate::command::{ExecOutcome, ExecTransition};
 use crate::command::shared::args::required_arg;
+use crate::command::{ExecOutcome, ExecTransition};
 use crate::replication::PsyncDecision;
 use crate::resp::append_simple_response;
 

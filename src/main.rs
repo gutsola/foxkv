@@ -1,17 +1,17 @@
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use foxkv::app_context::AppContext;
-use foxkv::config::{self, AppConfig};
 use foxkv::config::model::ReplicationConfig;
+use foxkv::config::{self, AppConfig};
 use foxkv::persistence::aof::{AofEngine, AofRuntimeConfig, replay_commands};
 use foxkv::persistence::rdb::RdbDirtyTracker;
 use foxkv::persistence::rdb_dirty_wrapper::StorageWithRdbDirty;
-use foxkv::replication::replica_client::start_replica_sync_task;
 use foxkv::replication::ReplicationManager;
+use foxkv::replication::replica_client::start_replica_sync_task;
 use foxkv::server::run_server;
 use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 
@@ -21,9 +21,7 @@ fn main() -> io::Result<()> {
     init_logger();
     let config = load_config_from_args()
         .map_err(|err| io::Error::other(format!("failed to load config: {err}")))?;
-    let worker_threads = config
-        .worker_threads
-        .unwrap_or_else(default_worker_threads);
+    let worker_threads = config.worker_threads.unwrap_or_else(default_worker_threads);
     let addr = config.listen_addr();
     let pid = std::process::id();
 
@@ -136,7 +134,7 @@ fn init_logger() {
 
 #[cfg(unix)]
 async fn wait_for_shutdown_signal() {
-    use tokio::signal::unix::{signal, SignalKind};
+    use tokio::signal::unix::{SignalKind, signal};
     let mut sigterm = signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
@@ -146,7 +144,9 @@ async fn wait_for_shutdown_signal() {
 
 #[cfg(not(unix))]
 async fn wait_for_shutdown_signal() {
-    tokio::signal::ctrl_c().await.expect("failed to listen for Ctrl+C");
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to listen for Ctrl+C");
 }
 
 fn print_startup_logo(port: u16, pid: u32, mode: &str) {

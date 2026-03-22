@@ -276,7 +276,11 @@ pub fn cmd_zrangebylex(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> R
     Ok(())
 }
 
-pub fn cmd_zrangebyscore(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn cmd_zrangebyscore(
+    args: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let (min, min_excl) = parse_score_bound(required_arg(args, 1)?)?;
     let (max, max_excl) = parse_score_bound(required_arg(args, 2)?)?;
@@ -330,7 +334,11 @@ pub fn cmd_zrem(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
     Ok(())
 }
 
-pub fn cmd_zremrangebylex(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn cmd_zremrangebylex(
+    args: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let (min, min_inc) = parse_lex_bound(required_arg(args, 1)?)?;
     let (max, max_inc) = parse_lex_bound(required_arg(args, 2)?)?;
@@ -344,7 +352,11 @@ pub fn cmd_zremrangebylex(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -
     Ok(())
 }
 
-pub fn cmd_zremrangebyrank(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn cmd_zremrangebyrank(
+    args: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let start = parse_i64(required_arg(args, 1)?)?;
     let stop = parse_i64(required_arg(args, 2)?)?;
@@ -358,7 +370,11 @@ pub fn cmd_zremrangebyrank(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) 
     Ok(())
 }
 
-pub fn cmd_zremrangebyscore(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn cmd_zremrangebyscore(
+    args: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let (min, min_excl) = parse_score_bound(required_arg(args, 1)?)?;
     let (max, max_excl) = parse_score_bound(required_arg(args, 2)?)?;
@@ -395,7 +411,11 @@ pub fn cmd_zrevrange(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Res
     Ok(())
 }
 
-pub fn cmd_zrevrangebylex(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn cmd_zrevrangebylex(
+    args: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let (max, max_inc) = parse_lex_bound(required_arg(args, 1)?)?;
     let (min, min_inc) = parse_lex_bound(required_arg(args, 2)?)?;
@@ -406,7 +426,11 @@ pub fn cmd_zrevrangebylex(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -
     Ok(())
 }
 
-pub fn cmd_zrevrangebyscore(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn cmd_zrevrangebyscore(
+    args: &[&[u8]],
+    ctx: &AppContext,
+    out: &mut Vec<u8>,
+) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     let (max, max_excl) = parse_score_bound(required_arg(args, 1)?)?;
     let (min, min_excl) = parse_score_bound(required_arg(args, 2)?)?;
@@ -518,8 +542,7 @@ fn persist_zset_or_delete(ctx: &AppContext, key: &[u8], zset: ZSet) {
 }
 
 fn parse_score(raw: &[u8]) -> Result<f64, String> {
-    let s = std::str::from_utf8(raw)
-        .map_err(|_| "ERR value is not a valid float".to_string())?;
+    let s = std::str::from_utf8(raw).map_err(|_| "ERR value is not a valid float".to_string())?;
     let value: f64 = s
         .parse()
         .map_err(|_| "ERR value is not a valid float".to_string())?;
@@ -538,17 +561,21 @@ fn parse_score_bound(raw: &[u8]) -> Result<(f64, bool), String> {
         return Ok((f64::INFINITY, false));
     }
     let (value, excl) = if raw.first() == Some(&b'(') {
-        (std::str::from_utf8(&raw[1..])
-            .map_err(|_| "ERR min or max is not a float".to_string())?
-            .parse::<f64>()
-            .map_err(|_| "ERR min or max is not a float".to_string())?,
-            true)
+        (
+            std::str::from_utf8(&raw[1..])
+                .map_err(|_| "ERR min or max is not a float".to_string())?
+                .parse::<f64>()
+                .map_err(|_| "ERR min or max is not a float".to_string())?,
+            true,
+        )
     } else {
-        (std::str::from_utf8(raw)
-            .map_err(|_| "ERR min or max is not a float".to_string())?
-            .parse::<f64>()
-            .map_err(|_| "ERR min or max is not a float".to_string())?,
-            false)
+        (
+            std::str::from_utf8(raw)
+                .map_err(|_| "ERR min or max is not a float".to_string())?
+                .parse::<f64>()
+                .map_err(|_| "ERR min or max is not a float".to_string())?,
+            false,
+        )
     };
     if !value.is_finite() {
         return Err("ERR min or max is not a float".to_string());

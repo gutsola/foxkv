@@ -268,7 +268,9 @@ mod tests {
     fn aof_engine_append_set_writes_to_file() {
         let path = temp_aof_path("append_set");
         let engine = create_test_engine(&path);
-        engine.append_set(b"mykey", b"myvalue", None, SetCondition::None).unwrap();
+        engine
+            .append_set(b"mykey", b"myvalue", None, SetCondition::None)
+            .unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
         assert!(contents.starts_with(b"*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n"));
@@ -279,7 +281,9 @@ mod tests {
     fn aof_engine_append_set_with_ttl_writes_px_option() {
         let path = temp_aof_path("append_set_ttl");
         let engine = create_test_engine(&path);
-        engine.append_set(b"key", b"val", Some(5000), SetCondition::None).unwrap();
+        engine
+            .append_set(b"key", b"val", Some(5000), SetCondition::None)
+            .unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
         assert!(contents.windows(2).any(|w| w == b"PX"));
@@ -290,7 +294,9 @@ mod tests {
     fn aof_engine_append_set_with_condition_writes_nx_or_xx() {
         let path = temp_aof_path("append_set_nx");
         let engine = create_test_engine(&path);
-        engine.append_set(b"key", b"val", None, SetCondition::Nx).unwrap();
+        engine
+            .append_set(b"key", b"val", None, SetCondition::Nx)
+            .unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
         assert!(contents.windows(2).any(|w| w == b"NX"));
@@ -298,7 +304,9 @@ mod tests {
 
         let path = temp_aof_path("append_set_xx");
         let engine = create_test_engine(&path);
-        engine.append_set(b"key", b"val", None, SetCondition::Xx).unwrap();
+        engine
+            .append_set(b"key", b"val", None, SetCondition::Xx)
+            .unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
         assert!(contents.windows(2).any(|w| w == b"XX"));
@@ -408,7 +416,9 @@ mod tests {
     fn aof_engine_append_mset_writes_correct_command() {
         let path = temp_aof_path("append_mset");
         let engine = create_test_engine(&path);
-        engine.append_mset(&[(b"k1", b"v1"), (b"k2", b"v2")]).unwrap();
+        engine
+            .append_mset(&[(b"k1", b"v1"), (b"k2", b"v2")])
+            .unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
         assert!(contents.starts_with(b"*5\r\n$4\r\nMSET\r\n"));
@@ -419,7 +429,9 @@ mod tests {
     fn aof_engine_append_mset_args_writes_correct_command() {
         let path = temp_aof_path("append_mset_args");
         let engine = create_test_engine(&path);
-        engine.append_mset_args(&[b"k1", b"v1", b"k2", b"v2"]).unwrap();
+        engine
+            .append_mset_args(&[b"k1", b"v1", b"k2", b"v2"])
+            .unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
         assert!(contents.starts_with(b"*5\r\n$4\r\nMSET\r\n"));
@@ -466,7 +478,11 @@ mod tests {
         engine.append_flushall().unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
-        assert!(contents.starts_with(b"*1\r\n$8\r\nFLUSHALL\r\n"), "actual contents: {:?}", String::from_utf8_lossy(&contents));
+        assert!(
+            contents.starts_with(b"*1\r\n$8\r\nFLUSHALL\r\n"),
+            "actual contents: {:?}",
+            String::from_utf8_lossy(&contents)
+        );
         cleanup(&path);
     }
 
@@ -529,8 +545,12 @@ mod tests {
     fn aof_engine_multiple_appends_accumulate_in_file() {
         let path = temp_aof_path("multiple_appends");
         let engine = create_test_engine(&path);
-        engine.append_set(b"k1", b"v1", None, SetCondition::None).unwrap();
-        engine.append_set(b"k2", b"v2", None, SetCondition::None).unwrap();
+        engine
+            .append_set(b"k1", b"v1", None, SetCondition::None)
+            .unwrap();
+        engine
+            .append_set(b"k2", b"v2", None, SetCondition::None)
+            .unwrap();
         engine.append_del(&[b"k1"]).unwrap();
         engine.sync_data().unwrap();
         let contents = fs::read(&path).unwrap();
@@ -543,7 +563,9 @@ mod tests {
     fn aof_engine_sync_data_succeeds_after_write() {
         let path = temp_aof_path("sync_data");
         let engine = create_test_engine(&path);
-        engine.append_set(b"key", b"value", None, SetCondition::None).unwrap();
+        engine
+            .append_set(b"key", b"value", None, SetCondition::None)
+            .unwrap();
         let result = engine.sync_data();
         assert!(result.is_ok());
         cleanup(&path);
