@@ -42,7 +42,7 @@ pub fn cmd_hello(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<
     // HELLO [protover [AUTH username password] [SETNAME clientname]]
     // Without args or protover=2: RESP2 format (array of alternating key-value pairs)
     let protover = args
-        .get(0)
+        .first()
         .and_then(|v| std::str::from_utf8(v).ok())
         .and_then(|s| s.parse::<u32>().ok());
     if let Some(3) = protover {

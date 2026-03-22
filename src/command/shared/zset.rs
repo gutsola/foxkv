@@ -125,8 +125,8 @@ impl ZSet {
             update[i] = x;
         }
 
-        for i in 0..level {
-            let prev = update[i];
+        for (i, prev_ref) in update.iter().enumerate().take(level) {
+            let prev = *prev_ref;
             let next = self.nodes[prev].forward[i];
             self.nodes[prev].forward[i] = Some(idx);
             self.nodes[idx].forward[i] = next;
@@ -145,15 +145,14 @@ impl ZSet {
     fn alloc_node(&mut self, member: Vec<u8>, score: f64, level: usize) -> usize {
         let mut node = SkipNode::new(member, score, level);
         node.forward.resize(MAX_LEVEL, None);
-        let idx = if let Some(i) = self.free.pop() {
+        if let Some(i) = self.free.pop() {
             self.nodes[i] = node;
             i
         } else {
             let i = self.nodes.len();
             self.nodes.push(node);
             i
-        };
-        idx
+        }
     }
 
     fn remove_node(&mut self, idx: usize) {
@@ -162,10 +161,10 @@ impl ZSet {
             let prev = self.find_prev_at_level(idx, i);
             let next = self.nodes[idx].forward.get(i).and_then(|o| *o);
             self.nodes[prev].forward[i] = next;
-            if i == 0 {
-                if let Some(n) = next {
-                    self.nodes[n].backward = Some(prev);
-                }
+            if i == 0
+                && let Some(n) = next
+            {
+                self.nodes[n].backward = Some(prev);
             }
         }
         self.nodes[idx] = SkipNode::head();
@@ -195,14 +194,12 @@ impl ZSet {
 
     fn rand_fraction(&self) -> f64 {
         use std::collections::hash_map::RandomState;
-        use std::hash::{BuildHasher, Hash, Hasher};
-        let mut hasher = RandomState::new().build_hasher();
+        use std::hash::BuildHasher;
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        seed.hash(&mut hasher);
-        (hasher.finish() % 10000) as f64 / 10000.0
+        (RandomState::new().hash_one(seed) % 10000) as f64 / 10000.0
     }
 
     /// Iterate (member, score) in ascending order.
@@ -287,7 +284,7 @@ impl ZSet {
                 out.push((self.nodes[idx].member.clone(), self.nodes[idx].score));
             }
             i += 1;
-            x = self.nodes[idx].forward.get(0).and_then(|o| *o);
+            x = self.nodes[idx].forward.first().copied().flatten();
         }
         out
     }
@@ -319,7 +316,7 @@ impl ZSet {
             if s > max {
                 break;
             }
-            x = self.nodes[idx].forward.get(0).and_then(|o| *o);
+            x = self.nodes[idx].forward.first().copied().flatten();
         }
         out
     }
@@ -371,7 +368,7 @@ impl ZSet {
             if !max.is_empty() && m_slice > max {
                 break;
             }
-            x = self.nodes[idx].forward.get(0).and_then(|o| *o);
+            x = self.nodes[idx].forward.first().copied().flatten();
         }
         out
     }
@@ -472,7 +469,7 @@ impl<'a> Iterator for ZSetIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let idx = self.current?;
         let node = self.nodes.get(idx)?;
-        self.current = node.forward.get(0).and_then(|o| *o);
+        self.current = node.forward.first().copied().flatten();
         Some((node.member.clone(), node.score))
     }
 }

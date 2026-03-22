@@ -222,7 +222,7 @@ pub fn cmd_flushall(_args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Res
 
 pub fn cmd_info(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let section = args
-        .get(0)
+        .first()
         .and_then(|v| std::str::from_utf8(v).ok())
         .unwrap_or("server");
     let mut buf = String::new();

@@ -75,7 +75,7 @@ async fn run_sync_session(ctx: Arc<AppContext>, state: &mut UpstreamState) -> io
     let psync_reply = read_line(&mut stream).await?;
     if psync_reply.starts_with(b"+FULLRESYNC ") {
         let reply = std::str::from_utf8(&psync_reply).unwrap_or_default();
-        let parts: Vec<&str> = reply.trim().split_whitespace().collect();
+        let parts: Vec<&str> = reply.split_whitespace().collect();
         if parts.len() < 3 {
             return Err(io::Error::other("invalid FULLRESYNC reply"));
         }

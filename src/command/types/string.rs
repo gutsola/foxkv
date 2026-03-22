@@ -159,7 +159,7 @@ pub fn cmd_mget(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
 }
 
 pub fn cmd_mset(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
-    if args.len() % 2 != 0 {
+    if !args.len().is_multiple_of(2) {
         return Err("ERR syntax error".to_string());
     }
     if let Some(aof_engine) = ctx.aof.as_ref() {
@@ -185,7 +185,7 @@ pub fn cmd_mset(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
 }
 
 pub fn cmd_msetnx(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
-    if args.len() % 2 != 0 {
+    if !args.len().is_multiple_of(2) {
         return Err("ERR syntax error".to_string());
     }
     let mut exists = false;
@@ -215,12 +215,10 @@ pub fn cmd_msetnx(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result
         }
         true
     };
-    if applied {
-        if let Some(aof_engine) = ctx.aof.as_ref() {
-            aof_engine
-                .append_msetnx_args(args)
-                .map_err(|e| format!("ERR AOF append failed: {e}"))?;
-        }
+    if applied && let Some(aof_engine) = ctx.aof.as_ref() {
+        aof_engine
+            .append_msetnx_args(args)
+            .map_err(|e| format!("ERR AOF append failed: {e}"))?;
     }
     append_integer_response(out, if applied { 1 } else { 0 });
     Ok(())
@@ -267,23 +265,19 @@ pub fn cmd_set(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<()
         }
         SetCondition::Nx => {
             let applied = ctx.db.put_if_absent(key, new_entry);
-            if applied {
-                if let Some(aof_engine) = ctx.aof.as_ref() {
-                    aof_engine
-                        .append_set(key, value, ttl_ms, condition)
-                        .map_err(|e| format!("ERR AOF append failed: {e}"))?;
-                }
+            if applied && let Some(aof_engine) = ctx.aof.as_ref() {
+                aof_engine
+                    .append_set(key, value, ttl_ms, condition)
+                    .map_err(|e| format!("ERR AOF append failed: {e}"))?;
             }
             applied
         }
         SetCondition::Xx => {
             let applied = ctx.db.put_if_present(key, new_entry);
-            if applied {
-                if let Some(aof_engine) = ctx.aof.as_ref() {
-                    aof_engine
-                        .append_set(key, value, ttl_ms, condition)
-                        .map_err(|e| format!("ERR AOF append failed: {e}"))?;
-                }
+            if applied && let Some(aof_engine) = ctx.aof.as_ref() {
+                aof_engine
+                    .append_set(key, value, ttl_ms, condition)
+                    .map_err(|e| format!("ERR AOF append failed: {e}"))?;
             }
             applied
         }
@@ -314,12 +308,10 @@ pub fn cmd_setnx(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<
             expire_at_ms: None,
         },
     );
-    if applied {
-        if let Some(aof_engine) = ctx.aof.as_ref() {
-            aof_engine
-                .append_setnx(key, value)
-                .map_err(|e| format!("ERR AOF append failed: {e}"))?;
-        }
+    if applied && let Some(aof_engine) = ctx.aof.as_ref() {
+        aof_engine
+            .append_setnx(key, value)
+            .map_err(|e| format!("ERR AOF append failed: {e}"))?;
     }
     append_integer_response(out, if applied { 1 } else { 0 });
     Ok(())
@@ -556,7 +548,7 @@ fn parse_set_options(options: &[&[u8]]) -> Result<(Option<u64>, SetCondition), S
                 i += 1;
                 continue;
             }
-            if (b0 == b'e' && b1 == b'x') || (b0 == b'p' && b1 == b'x') {
+            if (b0 == b'p' || b0 == b'e') && b1 == b'x' {
                 if i + 1 >= options.len() || ttl_ms.is_some() {
                     return Err("ERR syntax error".to_string());
                 }

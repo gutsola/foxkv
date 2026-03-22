@@ -16,6 +16,11 @@ use foxkv::server::run_server;
 use foxkv::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+type RuntimeState = (
+    Arc<dyn StorageEngine + Send + Sync>,
+    Option<Arc<RdbDirtyTracker>>,
+    Option<Arc<AtomicBool>>,
+);
 
 fn main() -> io::Result<()> {
     init_logger();
@@ -68,24 +73,21 @@ fn main() -> io::Result<()> {
         eprintln!("# DB loaded from disk: {:.3} seconds", load_secs);
     }
 
-    let (db, rdb_dirty_tracker, rdb_bgsave_in_progress): (
-        Arc<dyn StorageEngine + Send + Sync>,
-        Option<Arc<RdbDirtyTracker>>,
-        Option<Arc<AtomicBool>>,
-    ) = if config.rdb.save_rules.is_empty() {
-        eprintln!("# RDB disabled (no save rules)");
-        (raw_db, None, None)
-    } else {
-        let tracker = Arc::new(RdbDirtyTracker::new());
-        let now_secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        tracker.set_last_save(now_secs);
-        let bgsave_in_progress = Arc::new(AtomicBool::new(false));
-        let wrapped = Arc::new(StorageWithRdbDirty::new(raw_db, tracker.clone()));
-        (wrapped, Some(tracker), Some(bgsave_in_progress))
-    };
+    let (db, rdb_dirty_tracker, rdb_bgsave_in_progress): RuntimeState =
+        if config.rdb.save_rules.is_empty() {
+            eprintln!("# RDB disabled (no save rules)");
+            (raw_db, None, None)
+        } else {
+            let tracker = Arc::new(RdbDirtyTracker::new());
+            let now_secs = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            tracker.set_last_save(now_secs);
+            let bgsave_in_progress = Arc::new(AtomicBool::new(false));
+            let wrapped = Arc::new(StorageWithRdbDirty::new(raw_db, tracker.clone()));
+            (wrapped, Some(tracker), Some(bgsave_in_progress))
+        };
 
     eprintln!("# Ready to accept connections");
 
@@ -107,10 +109,10 @@ fn main() -> io::Result<()> {
         tokio::select! {
             _ = server => {}
             _ = wait_for_shutdown_signal() => {
-                if let Some(ref aof) = ctx.aof {
-                    if let Err(e) = aof.sync_data() {
-                        eprintln!("# AOF sync failed: {e}");
-                    }
+                if let Some(ref aof) = ctx.aof
+                    && let Err(e) = aof.sync_data()
+                {
+                    eprintln!("# AOF sync failed: {e}");
                 }
                 eprintln!("Bye Bye!");
             }

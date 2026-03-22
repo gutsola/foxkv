@@ -203,11 +203,9 @@ impl AofEngine {
 mod tests {
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Arc;
 
     use super::*;
     use crate::command::SetCondition;
-    use crate::storage::{DashMapStorageEngine, DbConfig, StorageEngine};
 
     fn temp_aof_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("foxkv_test_{}.aof", name))
@@ -228,10 +226,6 @@ mod tests {
             use_rdb_preamble: false,
         };
         AofEngine::open(config).expect("failed to open aof engine")
-    }
-
-    fn test_db() -> Arc<dyn StorageEngine + Send + Sync> {
-        Arc::new(DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"))
     }
 
     #[test]

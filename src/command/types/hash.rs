@@ -32,6 +32,8 @@ macro_rules! hash_commands {
 }
 pub(crate) use hash_commands;
 
+type HashMapValue = BTreeMap<Vec<u8>, Vec<u8>>;
+
 pub fn cmd_hdel(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
     if args.len() < 2 {
@@ -156,7 +158,7 @@ pub fn cmd_hmget(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<
 
 pub fn cmd_hmset(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
-    if args.len() < 3 || args.len() % 2 == 0 {
+    if args.len() < 3 || args.len().is_multiple_of(2) {
         return Err("ERR wrong number of arguments for 'hmset' command".to_string());
     }
     let mut map = get_hash(ctx, key)?.unwrap_or_default();
@@ -193,7 +195,7 @@ pub fn cmd_hscan(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<
 
 pub fn cmd_hset(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
-    if args.len() < 3 || args.len() % 2 == 0 {
+    if args.len() < 3 || args.len().is_multiple_of(2) {
         return Err("ERR wrong number of arguments for 'hset' command".to_string());
     }
     let mut map = get_hash(ctx, key)?.unwrap_or_default();
@@ -246,7 +248,7 @@ pub fn cmd_hvals(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<
     Ok(())
 }
 
-fn get_hash(ctx: &AppContext, key: &[u8]) -> Result<Option<BTreeMap<Vec<u8>, Vec<u8>>>, String> {
+fn get_hash(ctx: &AppContext, key: &[u8]) -> Result<Option<HashMapValue>, String> {
     let Some(entry) = ctx.db.get_entry(key) else {
         return Ok(None);
     };
@@ -257,7 +259,7 @@ fn get_hash(ctx: &AppContext, key: &[u8]) -> Result<Option<BTreeMap<Vec<u8>, Vec
     }
 }
 
-fn persist_hash(ctx: &AppContext, key: &[u8], map: BTreeMap<Vec<u8>, Vec<u8>>) {
+fn persist_hash(ctx: &AppContext, key: &[u8], map: HashMapValue) {
     let value = encode_hash(&map);
     ctx.db.put_entry(
         key,
@@ -268,7 +270,7 @@ fn persist_hash(ctx: &AppContext, key: &[u8], map: BTreeMap<Vec<u8>, Vec<u8>>) {
     );
 }
 
-fn persist_hash_or_delete(ctx: &AppContext, key: &[u8], map: BTreeMap<Vec<u8>, Vec<u8>>) {
+fn persist_hash_or_delete(ctx: &AppContext, key: &[u8], map: HashMapValue) {
     if map.is_empty() {
         let _ = ctx.db.remove_entry(key);
     } else {

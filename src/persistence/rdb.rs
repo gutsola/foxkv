@@ -340,7 +340,7 @@ fn write_rdb(db: &dyn StorageEngine, w: &mut dyn Write) -> io::Result<()> {
 }
 
 fn encode_value_for_rdb(raw: &[u8]) -> io::Result<(u8, Vec<u8>)> {
-    let typed = decode_value(raw).map_err(|e| io::Error::other(e))?;
+    let typed = decode_value(raw).map_err(io::Error::other)?;
     match typed {
         TypedValue::String(s) => Ok((RDB_TYPE_STRING, s)),
         TypedValue::List(items) => {
@@ -508,6 +508,7 @@ fn encode_hash(map: &BTreeMap<Vec<u8>, Vec<u8>>) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::Path;
     use std::path::PathBuf;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
@@ -532,9 +533,9 @@ mod tests {
         Arc::new(DashMapStorageEngine::new(DbConfig { worker_count: 2 }).expect("db init failed"))
     }
 
-    fn create_test_config(path: &PathBuf) -> RdbRuntimeConfig {
+    fn create_test_config(path: &Path) -> RdbRuntimeConfig {
         RdbRuntimeConfig {
-            file_path: path.clone(),
+            file_path: path.to_path_buf(),
             save_rules: vec![SaveRule {
                 seconds: 900,
                 changes: 1,

@@ -46,15 +46,15 @@ pub fn cmd_bzpopmax(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resu
         return Err("ERR wrong number of arguments for 'bzpopmax' command".to_string());
     }
     for key in &args[..args.len() - 1] {
-        if let Some(mut zset) = get_zset(ctx, key)? {
-            if let Some((m, s)) = zset.pop_max() {
-                persist_zset_or_delete(ctx, key, zset);
-                append_array_header(out, 3);
-                append_bulk_response(out, Some(key));
-                append_bulk_response(out, Some(&m));
-                append_bulk_response(out, Some(s.to_string().as_bytes()));
-                return Ok(());
-            }
+        if let Some(mut zset) = get_zset(ctx, key)?
+            && let Some((m, s)) = zset.pop_max()
+        {
+            persist_zset_or_delete(ctx, key, zset);
+            append_array_header(out, 3);
+            append_bulk_response(out, Some(key));
+            append_bulk_response(out, Some(&m));
+            append_bulk_response(out, Some(s.to_string().as_bytes()));
+            return Ok(());
         }
     }
     append_bulk_response(out, None);
@@ -66,15 +66,15 @@ pub fn cmd_bzpopmin(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resu
         return Err("ERR wrong number of arguments for 'bzpopmin' command".to_string());
     }
     for key in &args[..args.len() - 1] {
-        if let Some(mut zset) = get_zset(ctx, key)? {
-            if let Some((m, s)) = zset.pop_min() {
-                persist_zset_or_delete(ctx, key, zset);
-                append_array_header(out, 3);
-                append_bulk_response(out, Some(key));
-                append_bulk_response(out, Some(&m));
-                append_bulk_response(out, Some(s.to_string().as_bytes()));
-                return Ok(());
-            }
+        if let Some(mut zset) = get_zset(ctx, key)?
+            && let Some((m, s)) = zset.pop_min()
+        {
+            persist_zset_or_delete(ctx, key, zset);
+            append_array_header(out, 3);
+            append_bulk_response(out, Some(key));
+            append_bulk_response(out, Some(&m));
+            append_bulk_response(out, Some(s.to_string().as_bytes()));
+            return Ok(());
         }
     }
     append_bulk_response(out, None);
@@ -83,7 +83,7 @@ pub fn cmd_bzpopmin(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Resu
 
 pub fn cmd_zadd(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(), String> {
     let key = required_arg(args, 0)?;
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+    if args.len() < 3 || !(args.len() - 1).is_multiple_of(2) {
         return Err("ERR wrong number of arguments for 'zadd' command".to_string());
     }
     let mut zset = get_zset(ctx, key)?.unwrap_or_default();
@@ -325,7 +325,7 @@ pub fn cmd_zrem(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
     };
     let mut removed = 0_i64;
     for member in &args[1..] {
-        if zset.remove(*member) {
+        if zset.remove(member) {
             removed += 1;
         }
     }
@@ -613,7 +613,7 @@ fn compute_zinter(ctx: &AppContext, keys: &[&[u8]]) -> Result<ZSet, String> {
     let Some(first_z) = get_zset(ctx, first)? else {
         return Ok(ZSet::new());
     };
-    let mut member_scores: HashMap<Vec<u8>, f64> = first_z.iter().map(|(m, s)| (m, s)).collect();
+    let mut member_scores: HashMap<Vec<u8>, f64> = first_z.iter().collect();
     for key in &keys[1..] {
         let Some(other) = get_zset(ctx, key)? else {
             return Ok(ZSet::new());

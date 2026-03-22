@@ -176,10 +176,10 @@ impl ReplicationManager {
             owned.push(Bytes::copy_from_slice(arg));
         }
         let write = QueuedWrite { argv: owned };
-        if let Err(err) = self.ingress_tx.try_send(write) {
-            if matches!(err, mpsc::error::TrySendError::Full(_)) {
-                self.dropped_ingress_writes.fetch_add(1, Ordering::Relaxed);
-            }
+        if let Err(err) = self.ingress_tx.try_send(write)
+            && matches!(err, mpsc::error::TrySendError::Full(_))
+        {
+            self.dropped_ingress_writes.fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -261,6 +261,12 @@ impl ReplicationManager {
         let first = backlog.entries.front().map(|v| v.start_offset).unwrap_or(0);
         let current = self.current_offset();
         requested_offset >= first.saturating_sub(1) && requested_offset <= current
+    }
+}
+
+impl Default for ReplicationManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

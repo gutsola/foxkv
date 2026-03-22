@@ -192,8 +192,7 @@ pub fn cmd_scan(args: &[&[u8]], ctx: &AppContext, out: &mut Vec<u8>) -> Result<(
             }
             count = parse_ascii_u64(args[i + 1])
                 .map_err(|_| "ERR value is not an integer or out of range".to_string())?
-                .min(1000)
-                .max(1) as usize;
+                .clamp(1, 1000) as usize;
             i += 2;
             continue;
         }
@@ -247,17 +246,17 @@ where
         append_integer_response(out, 0);
         return Ok(());
     };
-    if let Some(aof_engine) = ctx.aof.as_ref() {
-        if let Some(arg) = raw_arg {
-            match cmd {
-                b"EXPIRE" => aof_engine
-                    .append_expire(key, arg)
-                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
-                b"PEXPIRE" => aof_engine
-                    .append_pexpire(key, arg)
-                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
-                _ => {}
-            }
+    if let Some(aof_engine) = ctx.aof.as_ref()
+        && let Some(arg) = raw_arg
+    {
+        match cmd {
+            b"EXPIRE" => aof_engine
+                .append_expire(key, arg)
+                .map_err(|e| format!("ERR AOF append failed: {e}"))?,
+            b"PEXPIRE" => aof_engine
+                .append_pexpire(key, arg)
+                .map_err(|e| format!("ERR AOF append failed: {e}"))?,
+            _ => {}
         }
     }
     let now = current_time_ms();
@@ -279,17 +278,17 @@ fn set_expire_at(
         append_integer_response(out, 0);
         return Ok(());
     };
-    if let Some(aof_engine) = ctx.aof.as_ref() {
-        if let Some(arg) = raw_arg {
-            match cmd {
-                b"EXPIREAT" => aof_engine
-                    .append_expireat(key, arg)
-                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
-                b"PEXPIREAT" => aof_engine
-                    .append_pexpireat(key, arg)
-                    .map_err(|e| format!("ERR AOF append failed: {e}"))?,
-                _ => {}
-            }
+    if let Some(aof_engine) = ctx.aof.as_ref()
+        && let Some(arg) = raw_arg
+    {
+        match cmd {
+            b"EXPIREAT" => aof_engine
+                .append_expireat(key, arg)
+                .map_err(|e| format!("ERR AOF append failed: {e}"))?,
+            b"PEXPIREAT" => aof_engine
+                .append_pexpireat(key, arg)
+                .map_err(|e| format!("ERR AOF append failed: {e}"))?,
+            _ => {}
         }
     }
     entry.expire_at_ms = Some(expire_at_ms);
