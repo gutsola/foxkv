@@ -150,6 +150,6 @@ jobs:
           docker run -d --name foxkv-test -p 6379:6379 foxkv:test
           sleep 3
           nc -zv localhost 6379 || (docker logs foxkv-test && exit 1)
-          timeout 10s bash -c 'printf "*1\r\n$4\r\nPING\r\n" | nc -N -w 2 localhost 6379 | grep -q "PONG"' || (docker logs foxkv-test && exit 1)
+          printf '*1\r\n$4\r\nPING\r\n' | timeout 10s nc -N -w 2 localhost 6379 | grep -q "PONG" || (docker logs foxkv-test && exit 1)
           docker stop foxkv-test
           docker rm foxkv-test
