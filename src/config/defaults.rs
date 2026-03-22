@@ -8,7 +8,7 @@ use crate::config::model::{
 pub fn default_config() -> AppConfig {
     AppConfig {
         bind: vec!["127.0.0.1".to_string()],
-        port: 6380,
+        port: 6379,
         rdb: RdbConfig {
             save_rules: vec![],
             dbfilename: "dump.rdb".to_string(),

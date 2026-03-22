@@ -13,95 +13,91 @@
 </p>
 
 <p align="center">
-  <b>🚀 A high-performance, Redis-compatible in-memory key-value store written in Rust</b>
+  <b>🚀 一个用 Rust 编写的高性能、兼容 Redis 协议的内存键值存储</b>
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#documentation">Documentation</a> •
-  <a href="#benchmarks">Benchmarks</a> •
-  <a href="#contributing">Contributing</a>
-</p>
-
-<p align="center">
-  <b>English</b> | <a href="docs/zh-CN/README.md">中文</a>
+  <a href="#特性">特性</a> •
+  <a href="#快速开始">快速开始</a> •
+  <a href="#安装">安装</a> •
+  <a href="#文档">文档</a> •
+  <a href="#基准测试">基准测试</a> •
+  <a href="#贡献">贡献</a>
 </p>
 
 ***
 
-## ✨ Features
+## ✨ 特性
 
-- **🔌 Redis Protocol Compatible**: Drop-in replacement for Redis, supports all standard Redis clients
-- **⚡ High Performance**: Built with Rust and Tokio for maximum throughput and low latency
-- **📊 Rich Data Types**: String, Hash, List, Set, Sorted Set with full command support
-- **💾 Persistence**: AOF (Append-Only File) and RDB snapshot support
-- **🔄 Replication**: Master-replica replication for high availability
-- **🔒 ACL Support**: Access Control Lists for fine-grained security
-- **☁️ Cloud Native**: Easy deployment with Docker and Kubernetes
+- **🔌 兼容 Redis 协议**: 可直接替代 Redis，支持所有标准 Redis 客户端
+- **⚡ 高性能**: 基于 Rust 和 Tokio 构建，实现最大吞吐量和低延迟
+- **📊 丰富的数据类型**: 支持 String、Hash、List、Set、Sorted Set 及完整命令
+- **💾 持久化**: 支持 AOF（追加日志文件）和 RDB 快照
+- **🔄 复制**: 主从复制实现高可用
+- **🔒 ACL 支持**: 访问控制列表实现细粒度安全控制
+- **☁️ 云原生**: 支持 Docker 和 Kubernetes 轻松部署
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-### Using Cargo
+### 使用 Cargo
 
 ```bash
-# Clone the repository
+# 克隆仓库
 git clone https://github.com/gutsola/foxkv.git
 cd foxkv
 
-# Build and run
+# 构建并运行
 cargo run --release --bin foxkv
 ```
 
-### Using Docker
+### 使用 Docker
 
-**Quick Start:**
+**快速开始:**
 
 ```bash
-# Run with Docker
+# 使用 Docker 运行
 docker run -d --name foxkv -p 6379:6379 gutsola/foxkv:latest
 ```
 
-### Connect with Redis CLI
+### 使用 Redis CLI 连接
 
 ```bash
-# FoxKV runs on port 6379 by default
+# FoxKV 默认运行在 6379 端口
 redis-cli -p 6379
 
-# Test the connection
+# 测试连接
 127.0.0.1:6379> PING
 PONG
 
-# Set and get a key
+# 设置和获取键值
 127.0.0.1:6379> SET mykey "Hello FoxKV"
 OK
 127.0.0.1:6379> GET mykey
 "Hello FoxKV"
 ```
 
-## 📦 Installation
+## 📦 安装
 
-### From Source
+### 从源码安装
 
-**Prerequisites:**
+**前置要求:**
 
-- Rust 1.91+ (Install from [rustup.rs](https://rustup.rs))
+- Rust 1.91+ ([从 rustup.rs 安装](https://rustup.rs))
 
-**Build:**
+**构建:**
 
 ```bash
-# Clone repository
+# 克隆仓库
 git clone https://github.com/gutsola/foxkv.git
 cd foxkv
 
-# Build release binary
+# 构建发布版本
 cargo build --release --bin foxkv
 
-# Binary will be at: target/release/foxkv
+# 二进制文件位于: target/release/foxkv
 ```
 
-### Platform-Specific Builds
+### 平台特定构建
 
 **Windows:**
 
@@ -109,181 +105,181 @@ cargo build --release --bin foxkv
 cargo run --release --bin foxkv
 ```
 
-**Linux (musl target):**
+**Linux (musl 目标):**
 
 ```powershell
 $env:RUSTFLAGS='-Clinker=rust-lld'
 cargo build --release --bin foxkv --target x86_64-unknown-linux-musl
 ```
 
-### Configuration
+### 配置
 
-Specify a configuration file using the `--config` option:
+使用 `--config` 选项指定配置文件:
 
 ```bash
 ./foxkv --config /path/to/redis.conf
 ```
 
-If no config file is specified, FoxKV will:
-1. Check if `redis.conf` exists in the current directory
-2. Load it if present
-3. Otherwise use default settings
+如果未指定配置文件，FoxKV 将:
+1. 检查当前目录是否存在 `redis.conf` 文件
+2. 如果存在则加载该文件
+3. 否则使用默认设置
 
 
 
-## 💡 Usage Examples
+## 💡 使用示例
 
-### String Operations
+### 字符串操作
 
 ```bash
 redis-cli -p 6379
 
-# Basic string operations
+# 基本字符串操作
 SET user:1 "Alice"
 GET user:1
 APPEND user:1 " Smith"
 STRLEN user:1
 
-# Numeric operations
+# 数值操作
 SET counter 100
 INCR counter
 INCRBY counter 50
 DECR counter
 ```
 
-## 🏗️ Architecture
+## 🏗️ 架构
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    FoxKV Architecture                   │
+│                    FoxKV 架构                            │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
-│  │   Client    │    │   Client    │    │   Client    │ │
+│  │   客户端     │    │   客户端     │    │   客户端     │ │
 │  │  (Redis)    │    │  (Redis)    │    │  (Redis)    │ │
 │  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘ │
 │         │                  │                  │        │
 │         └──────────────────┼──────────────────┘        │
 │                            │                          │
 │  ┌─────────────────────────┴─────────────────────────┐ │
-│  │              TCP Server (Tokio)                   │ │
+│  │              TCP 服务器 (Tokio)                    │ │
 │  │         ┌─────────────────────────┐               │ │
-│  │         │    RESP Protocol        │               │ │
-│  │         │      Parser             │               │ │
+│  │         │    RESP 协议            │               │ │
+│  │         │      解析器             │               │ │
 │  │         └─────────────────────────┘               │ │
 │  └─────────────────────────┬─────────────────────────┘ │
 │                            │                          │
 │  ┌─────────────────────────┴─────────────────────────┐ │
-│  │              Command Processor                    │ │
+│  │              命令处理器                            │ │
 │  │    ┌─────────┐ ┌─────────┐ ┌─────────┐           │ │
 │  │    │ String  │ │  Hash   │ │  List   │           │ │
-│  │    │  Cmds   │ │  Cmds   │ │  Cmds   │           │ │
+│  │    │  命令   │ │  命令   │ │  命令   │           │ │
 │  │    └─────────┘ └─────────┘ └─────────┘           │ │
 │  │    ┌─────────┐ ┌─────────┐ ┌─────────┐           │ │
 │  │    │  Set    │ │  ZSet   │ │  Conn   │           │ │
-│  │    │  Cmds   │ │  Cmds   │ │  Cmds   │           │ │
+│  │    │  命令   │ │  命令   │ │  命令   │           │ │
 │  │    └─────────┘ └─────────┘ └─────────┘           │ │
 │  └─────────────────────────┬─────────────────────────┘ │
 │                            │                          │
 │  ┌─────────────────────────┴─────────────────────────┐ │
-│  │              Storage Engine                       │ │
+│  │              存储引擎                              │ │
 │  │         ┌─────────────────────┐                   │ │
 │  │         │     DashMap         │                   │ │
-│  │         │  (Concurrent Map)   │                   │ │
+│  │         │  (并发哈希表)        │                   │ │
 │  │         └─────────────────────┘                   │ │
 │  └───────────────────────────────────────────────────┘ │
 │                            │                           │
 │  ┌─────────────────────────┴─────────────────────────┐ │
-│  │              Persistence Layer                    │ │
+│  │              持久化层                              │ │
 │  │    ┌─────────────┐      ┌─────────────┐          │ │
 │  │    │    AOF      │      │    RDB      │          │ │
-│  │    │  (Append)   │      │ (Snapshot)  │          │ │
+│  │    │  (追加日志)  │      │  (快照)     │          │ │
 │  │    └─────────────┘      └─────────────┘          │ │
 │  └───────────────────────────────────────────────────┘ │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## 📊 Benchmarks
+## 📊 基准测试
 
-Performance comparison with Redis (single node, 16 threads):
+与 Redis 的性能对比（单节点，16 线程）:
 
-| Operation | FoxKV        | Redis 7.0    |
-| --------- | ------------ | ------------ |
-| SET       | 180K ops/sec | 200K ops/sec |
-| GET       | 220K ops/sec | 250K ops/sec |
-| LPUSH     | 160K ops/sec | 180K ops/sec |
-| HSET      | 150K ops/sec | 170K ops/sec |
+| 操作  | FoxKV        | Redis 7.0    |
+| ----- | ------------ | ------------ |
+| SET   | 180K ops/sec | 200K ops/sec |
+| GET   | 220K ops/sec | 250K ops/sec |
+| LPUSH | 160K ops/sec | 180K ops/sec |
+| HSET  | 150K ops/sec | 170K ops/sec |
 
-*Benchmarked on AMD Ryzen 9 5900X, 32GB RAM*
+*在 AMD Ryzen 9 5900X, 32GB RAM 上测试*
 
-Run benchmarks:
+运行基准测试:
 
 ```bash
 cargo bench
 ```
 
-## 📚 Documentation
+## 📚 文档
 
-- [Architecture Design](docs/en/architecture.md)
+- [架构设计](architecture.md)
 
-## 🐳 Docker Deployment
+## 🐳 Docker 部署
 
-### Quick Start
+### 快速开始
 
 ```bash
-# Run single node
+# 运行单节点
 docker run -d --name foxkv -p 6379:6379 gutsola/foxkv:latest
 ```
 
-### Environment Variables
+### 环境变量
 
-| Variable   | Description                              | Default |
+| 变量       | 说明                                     | 默认值  |
 | ---------- | ---------------------------------------- | ------- |
-| `RUST_LOG` | Log level (e.g., `debug`, `info`, `warn`) | `info`  |
+| `RUST_LOG` | 日志级别 (如 `debug`, `info`, `warn`)     | `info`  |
 
-FoxKV uses `env_logger` for logging. Set `RUST_LOG=debug` to enable debug logs.
+FoxKV 使用 `env_logger` 记录日志。设置 `RUST_LOG=debug` 启用调试日志。
 
-## 🤝 Contributing
+## 🤝 贡献
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+欢迎贡献！请查看 [CONTRIBUTING.md](../../CONTRIBUTING.md) 了解指南。
 
-### Quick Start for Contributors
+### 贡献者快速开始
 
 ```bash
-# Fork and clone
+# Fork 并克隆
 git clone https://github.com/gutsola/foxkv.git
 cd foxkv
 
-# Run tests
+# 运行测试
 cargo test
 
-# Run with logging
+# 带日志运行
 RUST_LOG=debug cargo run --bin foxkv
 ```
 
-## 🗺️ Roadmap
+## 🗺️ 路线图
 
-- [x] Core Redis data types and commands
-- [x] AOF persistence
-- [x] RDB snapshots
-- [x] Master-replica replication
-- [ ] Cluster mode
-- [ ] Lua scripting
-- [ ] Streams data type
-- [ ] Redis modules API
+- [x] 核心 Redis 数据类型和命令
+- [x] AOF 持久化
+- [x] RDB 快照
+- [x] 主从复制
+- [ ] 集群模式
+- [ ] Lua 脚本
+- [ ] Streams 数据类型
+- [ ] Redis 模块 API
 
-## 📄 License
+## 📄 许可证
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+本项目采用 MIT 许可证 - 查看 [LICENSE](../../LICENSE) 文件了解详情。
 
-## 🙏 Acknowledgments
+## 🙏 致谢
 
-- Inspired by [Redis](https://redis.io/) - The original in-memory data store
-- Built with [Tokio](https://tokio.rs/) - The asynchronous runtime for Rust
-- Storage powered by [DashMap](https://github.com/xacrimon/dashmap) - Concurrent hash map
+- 灵感来自 [Redis](https://redis.io/) - 原始的内存数据存储
+- 基于 [Tokio](https://tokio.rs/) 构建 - Rust 的异步运行时
+- 存储由 [DashMap](https://github.com/xacrimon/dashmap) 驱动 - 并发哈希表
 
-## 📬 Contact
+## 📬 联系方式
 
 - **Issues**: [GitHub Issues](https://github.com/gutsola/foxkv/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/gutsola/foxkv/discussions)
@@ -291,5 +287,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ***
 
 <p align="center">
-  Made with ❤️ in Rust
+  用 ❤️ 和 Rust 构建
 </p>
