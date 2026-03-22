@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust (minimal + lint components)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.91.1
         with:
           profile: minimal
           components: rustfmt, clippy
@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust (minimal)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.91.1
         with:
           profile: minimal
 
@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust target
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.91.1
         with:
           profile: minimal
           targets: ${{ matrix.target }}
