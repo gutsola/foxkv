@@ -1,11 +1,11 @@
 # FoxKV
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Language-Rust-DEA584?style=flat&logo=rust&logoColor=black" alt="Language: Rust"/>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Language-Rust-blue?style=flat&logo=rust&logoColor=white" alt="Language: Rust"/>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://github.com/gutsola/foxkv/releases"><img src="https://img.shields.io/github/v/release/gutsola/foxkv" alt="GitHub release"></a>
   <a href="https://github.com/gutsola/foxkv/actions"><img src="https://img.shields.io/github/actions/workflow/status/gutsola/foxkv/ci.yml" alt="CI"></a>
 </p>
