@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Rust build artifacts
+target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation (keep for reference, but not needed in build)
+docs/
+*.md
+
+# CI/CD
+.github/
+
+# Tests
+benches/
+tests/
+
+# Examples
+examples/
+
+# Docker files themselves (avoid recursion)
+docker-compose.yml
+.dockerignore
+
+# Local data (don't include in build)
+*.aof
+*.rdb
+data/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

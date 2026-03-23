@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (minimal + lint components)
+        uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          profile: minimal
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: >
+          cargo clippy --workspace --all-targets --
+          -D clippy::correctness
+          -D clippy::suspicious
+          -W clippy::perf
+          -W clippy::style
+          -W clippy::complexity
+
+  test:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (minimal)
+        uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          profile: minimal
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --workspace --locked --verbose
+
+  build-release:
+    name: Build Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: foxkv
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary: foxkv
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: foxkv.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: foxkv
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          profile: minimal
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build release
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin foxkv
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foxkv-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+
+  docker:
+    name: Docker Build
+    if: github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: foxkv:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        shell: bash
+        run: |
+          docker run -d --name foxkv-test -p 6379:6379 foxkv:test
+          sleep 3
+          nc -zv localhost 6379 || (docker logs foxkv-test && exit 1)
+          printf '*1\r\n$4\r\nPING\r\n' | timeout 10s nc -N -w 2 localhost 6379 | grep -q "PONG" || (docker logs foxkv-test && exit 1)
+          docker stop foxkv-test
+          docker rm foxkv-test
