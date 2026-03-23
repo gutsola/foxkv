@@ -9,11 +9,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://github.com/gutsola/foxkv/releases"><img src="https://img.shields.io/github/v/release/gutsola/foxkv" alt="GitHub release"></a>
   <a href="https://github.com/gutsola/foxkv/actions"><img src="https://img.shields.io/github/actions/workflow/status/gutsola/foxkv/ci.yml" alt="CI"></a>
-  <a href="https://crates.io/crates/foxkv"><img src="https://img.shields.io/crates/v/foxkv.svg" alt="Crates.io"></a>
 </p>
 
 <p align="center">
-  <b>🚀 A high-performance, Redis-compatible in-memory key-value store written in Rust</b>
+  <b>🚀 A Redis-compatible in-memory key-value store in Rust, delivering 2–3x Redis throughput</b>
 </p>
 
 <p align="center">
@@ -45,6 +44,12 @@
 
 ### Using Cargo
 
+**Prerequisites:**
+
+- Rust 1.91+ (Install from [rustup.rs](https://rustup.rs))
+
+**Quick Start:**
+
 ```bash
 # Clone the repository
 git clone https://github.com/gutsola/foxkv.git
@@ -52,7 +57,57 @@ cd foxkv
 
 # Build and run
 cargo run --release --bin foxkv
+
+# Run as replica node
+cargo run --release --bin foxkv -- --config replica.conf
+
+# Run with debug logging
+RUST_LOG=debug cargo run --release --bin foxkv
 ```
+
+**Environment Variables:**
+
+| Variable   | Description                              | Default |
+| ---------- | ---------------------------------------- | ------- |
+| `RUST_LOG` | Log level (e.g., `debug`, `info`, `warn`) | `info`  |
+
+FoxKV uses `env_logger` for logging. Set `RUST_LOG=debug` to enable debug logs.
+
+**Build Release Binary:**
+
+```bash
+# Build release binary
+cargo build --release --bin foxkv
+
+# Binary will be at: target/release/foxkv
+```
+
+**Platform-Specific Builds:**
+
+*Windows:*
+
+```powershell
+cargo run --release --bin foxkv
+```
+
+*Windows → Linux (musl cross-compile):*
+
+```powershell
+$env:RUSTFLAGS='-Clinker=rust-lld'; cargo build --release --bin foxkv --target x86_64-unknown-linux-musl
+```
+
+**Configuration:**
+
+Specify a configuration file using the `--config` option:
+
+```bash
+./foxkv --config /path/to/redis.conf
+```
+
+If no config file is specified, FoxKV will:
+1. Check if `redis.conf` exists in the current directory
+2. Load it if present
+3. Otherwise use default settings
 
 ### Using Docker
 
@@ -62,6 +117,8 @@ cargo run --release --bin foxkv
 # Run with Docker
 docker run -d --name foxkv -p 6379:6379 gutsola/foxkv:latest
 ```
+
+## 💡 Usage Examples
 
 ### Connect with Redis CLI
 
@@ -79,59 +136,6 @@ OK
 127.0.0.1:6379> GET mykey
 "Hello FoxKV"
 ```
-
-## 📦 Installation
-
-### From Source
-
-**Prerequisites:**
-
-- Rust 1.91+ (Install from [rustup.rs](https://rustup.rs))
-
-**Build:**
-
-```bash
-# Clone repository
-git clone https://github.com/gutsola/foxkv.git
-cd foxkv
-
-# Build release binary
-cargo build --release --bin foxkv
-
-# Binary will be at: target/release/foxkv
-```
-
-### Platform-Specific Builds
-
-**Windows:**
-
-```powershell
-cargo run --release --bin foxkv
-```
-
-**Linux (musl target):**
-
-```powershell
-$env:RUSTFLAGS='-Clinker=rust-lld'
-cargo build --release --bin foxkv --target x86_64-unknown-linux-musl
-```
-
-### Configuration
-
-Specify a configuration file using the `--config` option:
-
-```bash
-./foxkv --config /path/to/redis.conf
-```
-
-If no config file is specified, FoxKV will:
-1. Check if `redis.conf` exists in the current directory
-2. Load it if present
-3. Otherwise use default settings
-
-
-
-## 💡 Usage Examples
 
 ### String Operations
 
@@ -206,43 +210,40 @@ DECR counter
 
 ## 📊 Benchmarks
 
-Performance comparison with Redis (single node, 16 threads):
+Performance comparison with Valkey 7.2.12 and Redis 8.6.1 (single node, 8 threads):
 
-| Operation | FoxKV        | Redis 7.0    |
-| --------- | ------------ | ------------ |
-| SET       | 180K ops/sec | 200K ops/sec |
-| GET       | 220K ops/sec | 250K ops/sec |
-| LPUSH     | 160K ops/sec | 180K ops/sec |
-| HSET      | 150K ops/sec | 170K ops/sec |
-
-*Benchmarked on AMD Ryzen 9 5900X, 32GB RAM*
-
-Run benchmarks:
-
+**Test Command:**
 ```bash
-cargo bench
+redis-benchmark \
+  -n 500000 \
+  -c 300 \
+  -d 64 \
+  --threads 8
 ```
+
+**Visual Throughput Comparison:**
+
+![FoxKV Benchmark Throughput Comparison](docs/assets/benchmark-throughput.svg)
+
+**Round 1 Results:**
+
+| Operation | Valkey 7.2.12 | Redis 8.6.1 | FoxKV    | FoxKV Speedup (vs Redis) |
+| --------- | ------------- | ----------- | -------- | ------------------------ |
+| SET       | 39,062.5      | 34,952.81   | 98,500.09 | **2.8x**                |
+| GET       | 39,086.93     | 34,361.9    | 94,571.59 | **2.7x**                |
+
+**Round 2 Results:**
+
+| Operation | Valkey 7.2.12 | Redis 8.6.1 | FoxKV    | FoxKV Speedup (vs Redis) |
+| --------- | ------------- | ----------- | -------- | ------------------------ |
+| SET       | 36,250.27     | 36,145.45   | 94,464.99 | **2.6x**                |
+| GET       | 41,507.55     | 36,184.69   | 94,393.05 | **2.6x**                |
+
+*Benchmarked on CentOS 7, 8 Cores, 8GB RAM*
 
 ## 📚 Documentation
 
 - [Architecture Design](docs/en/architecture.md)
-
-## 🐳 Docker Deployment
-
-### Quick Start
-
-```bash
-# Run single node
-docker run -d --name foxkv -p 6379:6379 gutsola/foxkv:latest
-```
-
-### Environment Variables
-
-| Variable   | Description                              | Default |
-| ---------- | ---------------------------------------- | ------- |
-| `RUST_LOG` | Log level (e.g., `debug`, `info`, `warn`) | `info`  |
-
-FoxKV uses `env_logger` for logging. Set `RUST_LOG=debug` to enable debug logs.
 
 ## 🤝 Contributing
 
@@ -288,8 +289,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Issues**: [GitHub Issues](https://github.com/gutsola/foxkv/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/gutsola/foxkv/discussions)
 
-***
-
-<p align="center">
-  Made with ❤️ in Rust
-</p>
