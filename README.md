@@ -1,8 +1,7 @@
 # FoxKV
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust"/>
-  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis Compatible"/>
+  <img src="https://img.shields.io/badge/Language-Rust-DEA584?style=flat&logo=rust&logoColor=black" alt="Language: Rust"/>
 </p>
 
 <p align="center">
